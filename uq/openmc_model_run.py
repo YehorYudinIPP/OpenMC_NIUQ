@@ -56,8 +56,8 @@ def build_openmc_model(config):
       * Room: air-filled box with vacuum boundary conditions.
 
     Run mode : fixed source (14.1 MeV DT-fusion neutrons in the Li target).
-    QoI      : tritium production rate (reactions per source neutron) in the
-               Li2TiO3 ceramic.
+    QoIs     : tritium production rate (reactions per source neutron) in the
+               Li2TiO3 ceramic; total neutron flux across all materials.
     """
     import openmc
 
@@ -72,7 +72,7 @@ def build_openmc_model(config):
     cu_thickness       = float(geom_cfg.get('cu_thickness',       0.3))
     water_thickness    = float(geom_cfg.get('water_thickness',    0.6))
     vacuum_thickness_1 = float(geom_cfg.get('vacuum_thickness_1', 1.5))
-    graphite_thickness = float(geom_cfg.get('graphite_thickness', 0.7))
+    graphite_thickness = float(_get_mean(geom_cfg.get('graphite_thickness', 0.7)))
     vacuum_thickness_2 = float(geom_cfg.get('vacuum_thickness_2', 0.48))
     ti_thickness       = float(geom_cfg.get('ti_thickness',       0.6))
     air_gap            = float(geom_cfg.get('air_gap',            0.1))
@@ -321,7 +321,12 @@ def build_openmc_model(config):
     tally = openmc.Tally(name='tritium_production')
     tally.filters = [openmc.MaterialFilter([li_ceramic])]
     tally.scores  = ['(n,t)']
-    tallies = openmc.Tallies([tally])
+
+    # Score total neutron flux across all materials
+    flux_tally = openmc.Tally(name='total_neutron_flux')
+    flux_tally.scores = ['flux']
+
+    tallies = openmc.Tallies([tally, flux_tally])
 
     # ── Assemble model ────────────────────────────────────────────────────────
     model = openmc.Model(
@@ -348,7 +353,7 @@ def extract_qois(statepoint_file, qoi_names):
         Path to the statepoint HDF5 file written by OpenMC.
     qoi_names : list[str]
         Names of QoIs requested in the config.
-        Supported: ``'tritium_production_rate'``, ``'k_eff'``.
+        Supported: ``'tritium_production_rate'``, ``'total_neutron_flux'``, ``'k_eff'``.
 
     Returns
     -------
@@ -374,6 +379,17 @@ def extract_qois(statepoint_file, qoi_names):
             except Exception as exc:
                 print(f"  Warning: could not extract tritium_production_rate: {exc}")
                 results['tritium_production_rate'] = 0.0
+
+        if 'total_neutron_flux' in qoi_names:
+            try:
+                tally = sp.get_tally(name='total_neutron_flux')
+                df  = tally.get_pandas_dataframe()
+                flux = float(df['mean'].sum())
+                results['total_neutron_flux'] = flux
+                print(f"  total_neutron_flux = {flux:.4e}")
+            except Exception as exc:
+                print(f"  Warning: could not extract total_neutron_flux: {exc}")
+                results['total_neutron_flux'] = 0.0
 
     return results
 

@@ -10,12 +10,15 @@ geometry:
   # Target wheel (fixed)
   wh_r: 50.0                    # cm – target wheel cylinder radius
 
-  # Target layer thicknesses (cm, fixed)
+  # Target layer thicknesses (cm)
   li_thickness:       0.02
   cu_thickness:       0.3
   water_thickness:    0.6
   vacuum_thickness_1: 1.5
-  graphite_thickness: 0.7
+  graphite_thickness:             # cm – graphite shielding layer thickness (uncertain)
+    mean: 0.7
+    relative_stdev: 0.05
+    pdf: normal
   vacuum_thickness_2: 0.48
   ti_thickness:       0.6
   air_gap:            0.1
@@ -63,4 +66,5 @@ output:
   results_file: results.csv
   qoi:
     - tritium_production_rate   # T nuclei produced per source neutron (TBR)
+    - total_neutron_flux        # total neutron flux intensity (n/cm²/s per source neutron)
 
