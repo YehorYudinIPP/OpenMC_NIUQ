@@ -72,7 +72,7 @@ def build_openmc_model(config):
     cu_thickness       = float(geom_cfg.get('cu_thickness',       0.3))
     water_thickness    = float(geom_cfg.get('water_thickness',    0.6))
     vacuum_thickness_1 = float(geom_cfg.get('vacuum_thickness_1', 1.5))
-    graphite_thickness = float(geom_cfg.get('graphite_thickness', 0.7))
+    graphite_thickness = float(_get_mean(geom_cfg.get('graphite_thickness', 0.7)))
     vacuum_thickness_2 = float(geom_cfg.get('vacuum_thickness_2', 0.48))
     ti_thickness       = float(geom_cfg.get('ti_thickness',       0.6))
     air_gap            = float(geom_cfg.get('air_gap',            0.1))
@@ -95,12 +95,6 @@ def build_openmc_model(config):
         _get_mean(mat_cfg.get('li_ceramic', {}).get('density',        3.43)))
     li6_enrichment     = float(
         _get_mean(mat_cfg.get('li_ceramic', {}).get('li6_enrichment', 7.5)))
-    li_target_density  = float(
-        _get_mean(mat_cfg.get('li_target',  {}).get('density',        0.534)))
-    water_density      = float(
-        _get_mean(mat_cfg.get('water',      {}).get('density',        1.0)))
-    graphite_density   = float(
-        _get_mean(mat_cfg.get('graphite',   {}).get('density',        2.1)))
 
     # ── Simulation settings ──────────────────────────────────────────────────
     particles  = int(sim_cfg.get('particles', 10000))
@@ -137,7 +131,7 @@ def build_openmc_model(config):
     # Natural lithium target
     li_target = openmc.Material(name='Lithium')
     li_target.add_element('Li', 1.0)
-    li_target.set_density('g/cm3', li_target_density)
+    li_target.set_density('g/cm3', 0.534)
     li_target.depletable = False
 
     # Copper
@@ -157,13 +151,13 @@ def build_openmc_model(config):
     h2o.add_nuclide('H1',  2.0)
     h2o.add_nuclide('O16', 1.0)
     h2o.add_s_alpha_beta('c_H_in_H2O')
-    h2o.set_density('g/cm3', water_density)
+    h2o.set_density('g/cm3', 1.0)
     h2o.depletable = False
 
     # Graphite shielding
     graphite = openmc.Material(name='Graphite')
     graphite.add_element('C', 1.0)
-    graphite.set_density('g/cm3', graphite_density)
+    graphite.set_density('g/cm3', 2.1)
     graphite.depletable = False
 
     # Air
