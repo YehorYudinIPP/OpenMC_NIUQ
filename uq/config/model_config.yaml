@@ -1,0 +1,51 @@
+# OpenMC Model Configuration for Uncertainty Quantification
+# Parameters with 'mean', 'relative_stdev', and 'pdf' fields are treated as
+# uncertain inputs by the EasyVVUQ campaign.  All other numeric values are
+# treated as fixed model parameters.
+
+# ── Geometry ──────────────────────────────────────────────────────────────────
+geometry:
+  type: pin_cell          # simple 2D reflective pin-cell geometry
+  fuel_radius:
+    mean: 0.41            # cm – nominal fuel pellet outer radius
+    relative_stdev: 0.02
+    pdf: normal
+  cladding_inner_radius: 0.42   # cm – fixed
+  cladding_outer_radius: 0.475  # cm – fixed
+  pitch: 1.26                   # cm – lattice pitch (fixed)
+
+# ── Materials ─────────────────────────────────────────────────────────────────
+materials:
+  fuel:
+    name: UO2
+    density:              # g/cm³
+      mean: 10.5
+      relative_stdev: 0.02
+      pdf: normal
+    enrichment:           # wt% U-235
+      mean: 3.1
+      relative_stdev: 0.05
+      pdf: normal
+  cladding:
+    name: Zircaloy-4
+    density: 6.55         # g/cm³ (fixed)
+  moderator:
+    name: H2O
+    density:              # g/cm³
+      mean: 0.7
+      relative_stdev: 0.03
+      pdf: normal
+
+# ── Simulation settings ───────────────────────────────────────────────────────
+simulation:
+  particles: 10000        # neutron histories per batch
+  batches: 150
+  inactive: 50            # inactive (warm-up) batches
+  seed: 1                 # random-number seed for reproducibility
+  output_directory: results/
+
+# ── Output / QoI ─────────────────────────────────────────────────────────────
+output:
+  results_file: results.csv   # written by openmc_model_run.py
+  qoi:
+    - k_eff                   # effective neutron multiplication factor
