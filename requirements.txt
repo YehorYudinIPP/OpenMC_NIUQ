@@ -1,0 +1,17 @@
+# OpenMC_NIUQ – Python dependencies
+#
+# Install with:
+#   conda create -n openmc-env -c conda-forge openmc
+#   conda activate openmc-env
+#   pip install -r requirements.txt
+
+# Neutron transport (install via conda-forge, not pip):
+#   openmc >= 0.14
+
+# Uncertainty quantification
+easyvvuq >= 1.2
+chaospy >= 4.3
+
+# General scientific stack
+numpy
+pyyaml

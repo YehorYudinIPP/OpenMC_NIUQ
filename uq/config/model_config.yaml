@@ -1,0 +1,66 @@
+# OpenMC TBM (Test Blanket Module) Pebble-Bed Model Configuration
+# Parameters with 'mean', 'relative_stdev', and 'pdf' fields are uncertain
+# inputs for the EasyVVUQ campaign.  Plain numeric values are fixed.
+
+# ── Geometry ──────────────────────────────────────────────────────────────────
+geometry:
+  type: tbm_pebble_bed          # TBM with Li2TiO3 pebbles (or monoblock)
+  pebbles_or_monoblock: pebbles # 'pebbles' or 'monoblock'
+
+  # Target wheel (fixed)
+  wh_r: 50.0                    # cm – target wheel cylinder radius
+
+  # Target layer thicknesses (cm, fixed)
+  li_thickness:       0.02
+  cu_thickness:       0.3
+  water_thickness:    0.6
+  vacuum_thickness_1: 1.5
+  graphite_thickness: 0.7
+  vacuum_thickness_2: 0.48
+  ti_thickness:       0.6
+  air_gap:            0.1
+
+  # TBM casing dimensions (cm, fixed)
+  eurofer_thickness: 0.5
+  tbm_width:         7.0
+  tbm_thickness:     2.0
+  tbm_height:        3.0
+  tbm_position_y:    -42.0      # cm – TBM y-offset from beam axis
+
+  # Pebble bed parameters (uncertain)
+  pebble_radius:
+    mean: 0.10                  # cm – nominal pebble radius
+    relative_stdev: 0.05
+    pdf: normal
+  packing_fraction:
+    mean: 0.30                  # nominal random packing fraction
+    relative_stdev: 0.05
+    pdf: uniform
+
+# ── Materials ─────────────────────────────────────────────────────────────────
+materials:
+  li_ceramic:
+    name: Li2TiO3
+    density:                    # g/cm³ – Li2TiO3 pebble density
+      mean: 3.43
+      relative_stdev: 0.02
+      pdf: normal
+    li6_enrichment:             # at% Li-6 in lithium
+      mean: 7.5                 # natural abundance
+      relative_stdev: 0.05
+      pdf: normal
+
+# ── Simulation settings ───────────────────────────────────────────────────────
+simulation:
+  run_mode: fixed_source        # neutron irradiation experiment
+  particles: 10000              # neutron histories per batch
+  batches:   100
+  seed:      1
+  output_directory: results/
+
+# ── Output / QoI ─────────────────────────────────────────────────────────────
+output:
+  results_file: results.csv
+  qoi:
+    - tritium_production_rate   # T nuclei produced per source neutron (TBR)
+
