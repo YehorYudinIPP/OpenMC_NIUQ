@@ -62,7 +62,6 @@ if parent_dir not in sys.path:
 from util.Encoder import AdvancedYAMLEncoder
 from util.utils import (
     add_timestamp_to_filename,
-    get_openmc_python,
     load_config,
     validate_execution_setup,
 )

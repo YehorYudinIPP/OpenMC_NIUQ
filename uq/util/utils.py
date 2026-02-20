@@ -1,9 +1,8 @@
 import os
-import sys
 import subprocess
+import sys
 import yaml
 from datetime import datetime
-import numpy as np
 
 
 def load_config(config_file):
