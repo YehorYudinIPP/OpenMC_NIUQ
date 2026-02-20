@@ -2,8 +2,35 @@
 A repository for non-intrusive Uncertainty Quantification (NI-UQ) for OpenMC neutronics models.
 
 The package uses [EasyVVUQ](https://github.com/UCL-CCS/EasyVVUQ) to perform forward
-uncertainty propagation (Polynomial Chaos Expansion and quasi-Monte Carlo) for neutronics
-models built with [OpenMC](https://openmc.org/).
+uncertainty propagation (Polynomial Chaos Expansion and quasi-Monte Carlo) for a
+fixed-source neutron irradiation model of a **Test Blanket Module (TBM)** built
+with [OpenMC](https://openmc.org/).
+
+### Model description
+
+The OpenMC model represents a compact accelerator-driven neutron source with:
+
+* **Rotating Li target wheel** – layered disk (Li → Cu → H₂O cooling → Cu →
+  vacuum → graphite shielding → vacuum → Ti window) inside a 50 cm-radius
+  ZCylinder.
+* **Test Blanket Module (TBM)** – Eurofer-97 RAFM steel casing filled with
+  Li₂TiO₃ ceramic either as a solid monoblock or as randomly packed pebbles
+  with air between them (selected via `pebbles_or_monoblock` config key).
+* **Room** – air-filled 3 m × 2 m × 3 m bounding box with vacuum boundaries.
+
+Run mode is **fixed source**: 14.1 MeV DT-fusion neutrons inside the Li target.
+
+**Quantity of interest (QoI)**: tritium breeding ratio (TBR) – tritium nuclei
+produced per source neutron via ⁶Li(n,t)⁴He reactions in the Li₂TiO₃ ceramic.
+
+**Uncertain parameters** for the UQ campaign:
+
+| Parameter | Description | Default | Distribution |
+|-----------|-------------|---------|--------------|
+| `li_ceramic_density` | Li₂TiO₃ pebble density (g/cm³) | 3.43 | Normal, CoV 2% |
+| `li6_enrichment` | Li-6 at% in the ceramic | 7.5 | Normal, CoV 5% |
+| `pebble_radius` | pebble radius (cm) | 0.10 | Normal, CoV 5% |
+| `packing_fraction` | random packing fraction | 0.30 | Uniform, CoV 5% |
 
 ## Repository structure
 

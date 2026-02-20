@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-openmc_model_run.py – EasyVVUQ wrapper for OpenMC neutronics models.
+openmc_model_run.py – EasyVVUQ wrapper for OpenMC TBM pebble-bed model.
 
-Reads a YAML configuration file, builds and runs an OpenMC pin-cell model,
-then writes the requested quantities of interest (QoIs) to a CSV file that
-the EasyVVUQ decoder can read.
+Reads a YAML configuration file, builds and runs an OpenMC fixed-source
+irradiation model of a Test Blanket Module (TBM) with Li2TiO3 ceramic pebbles,
+then writes the tritium production rate to a CSV file that the EasyVVUQ
+decoder can read.
 
 Usage
 -----
@@ -45,116 +46,283 @@ def load_config(config_file):
 
 def build_openmc_model(config):
     """
-    Build an OpenMC pin-cell model from *config* and return the
-    ``openmc.Model`` object.
+    Build an OpenMC TBM pebble-bed irradiation model from *config*.
 
-    The geometry is a 2-D reflective square pin cell containing:
-      * UO2 fuel pellet
-      * Zircaloy cladding
-      * Light-water moderator
+    Geometry (from the problem statement notebook):
+      * Rotating Li target wheel: layered disk (Li / Cu / H2O / Cu / vacuum /
+        graphite / vacuum / Ti) inside a ZCylinder.
+      * Test Blanket Module (TBM): Eurofer-97 casing filled with Li2TiO3
+        ceramic – either as a solid monoblock or as randomly packed pebbles
+        with air between them.
+      * Room: air-filled box with vacuum boundary conditions.
+
+    Run mode : fixed source (14.1 MeV DT-fusion neutrons in the Li target).
+    QoI      : tritium production rate (reactions per source neutron) in the
+               Li2TiO3 ceramic.
     """
     import openmc
 
-    # ── Geometry parameters ─────────────────────────────────────────────────
+    # ── Read config sections ─────────────────────────────────────────────────
     geom_cfg = config.get('geometry', {})
-    fuel_r = float(_get_mean(geom_cfg.get('fuel_radius', 0.41)))
-    clad_ir = float(geom_cfg.get('cladding_inner_radius', 0.42))
-    clad_or = float(geom_cfg.get('cladding_outer_radius', 0.475))
-    pitch = float(geom_cfg.get('pitch', 1.26))
+    mat_cfg  = config.get('materials', {})
+    sim_cfg  = config.get('simulation', {})
+
+    # ── Geometry parameters ──────────────────────────────────────────────────
+    # Target layer thicknesses (cm)
+    li_thickness       = float(geom_cfg.get('li_thickness',       0.02))
+    cu_thickness       = float(geom_cfg.get('cu_thickness',       0.3))
+    water_thickness    = float(geom_cfg.get('water_thickness',    0.6))
+    vacuum_thickness_1 = float(geom_cfg.get('vacuum_thickness_1', 1.5))
+    graphite_thickness = float(geom_cfg.get('graphite_thickness', 0.7))
+    vacuum_thickness_2 = float(geom_cfg.get('vacuum_thickness_2', 0.48))
+    ti_thickness       = float(geom_cfg.get('ti_thickness',       0.6))
+    air_gap            = float(geom_cfg.get('air_gap',            0.1))
+    wh_r               = float(geom_cfg.get('wh_r',               50.0))
+
+    # TBM casing dimensions (cm)
+    eurofer_thickness = float(geom_cfg.get('eurofer_thickness', 0.5))
+    tbm_width         = float(geom_cfg.get('tbm_width',         7.0))
+    tbm_thickness     = float(geom_cfg.get('tbm_thickness',     2.0))
+    tbm_height        = float(geom_cfg.get('tbm_height',        3.0))
+    tbm_position_y    = float(geom_cfg.get('tbm_position_y',    -42.0))
+
+    # Pebble bed parameters (may be uncertain / UQ-varied)
+    pebbles_or_monoblock = geom_cfg.get('pebbles_or_monoblock', 'pebbles')
+    pebble_radius    = float(_get_mean(geom_cfg.get('pebble_radius',    0.1)))
+    packing_fraction = float(_get_mean(geom_cfg.get('packing_fraction', 0.3)))
 
     # ── Material parameters ──────────────────────────────────────────────────
-    mat_cfg = config.get('materials', {})
-
-    fuel_density = float(_get_mean(mat_cfg.get('fuel', {}).get('density', 10.5)))
-    enrichment = float(_get_mean(mat_cfg.get('fuel', {}).get('enrichment', 3.1)))
-    clad_density = float(mat_cfg.get('cladding', {}).get('density', 6.55))
-    mod_density = float(_get_mean(mat_cfg.get('moderator', {}).get('density', 0.7)))
+    li_ceramic_density = float(
+        _get_mean(mat_cfg.get('li_ceramic', {}).get('density',        3.43)))
+    li6_enrichment     = float(
+        _get_mean(mat_cfg.get('li_ceramic', {}).get('li6_enrichment', 7.5)))
 
     # ── Simulation settings ──────────────────────────────────────────────────
-    sim_cfg = config.get('simulation', {})
-    particles = int(sim_cfg.get('particles', 10000))
-    batches = int(sim_cfg.get('batches', 150))
-    inactive = int(sim_cfg.get('inactive', 50))
-    seed = int(sim_cfg.get('seed', 1))
+    particles  = int(sim_cfg.get('particles', 10000))
+    batches    = int(sim_cfg.get('batches',   100))
+    seed       = int(sim_cfg.get('seed',      1))
     output_dir = sim_cfg.get('output_directory', 'results/')
 
     os.makedirs(output_dir, exist_ok=True)
 
     # ── Materials ────────────────────────────────────────────────────────────
-    fuel = openmc.Material(name='UO2 fuel')
-    fuel.set_density('g/cm3', fuel_density)
-    # enrichment is given as wt% U-235; the remainder is U-238
-    u235_wo = enrichment / 100.0
-    u238_wo = 1.0 - u235_wo
-    fuel.add_nuclide('U235', u235_wo, 'wo')
-    fuel.add_nuclide('U238', u238_wo, 'wo')
-    fuel.add_element('O', 2 * (u235_wo / 235.0 + u238_wo / 238.0)
-                     / ((u235_wo / 235.0 + u238_wo / 238.0)
-                        + 2 * (u235_wo / 235.0 + u238_wo / 238.0)), 'ao')
-    # Simpler approach: use the built-in enrichment helper
-    fuel = openmc.Material(name='UO2 fuel')
-    fuel.set_density('g/cm3', fuel_density)
-    fuel.add_element('U', 1.0, enrichment=enrichment)
-    fuel.add_element('O', 2.0)
+    # Li2TiO3 ceramic breeder
+    li_ceramic = openmc.Material(name='Li2TiO3')
+    li_ceramic.add_element('Li', 2.0, percent_type='ao',
+                           enrichment=li6_enrichment,
+                           enrichment_target='Li6',
+                           enrichment_type='wo')
+    li_ceramic.add_element('Ti', 1.0, percent_type='ao')
+    li_ceramic.add_element('O',  3.0, percent_type='ao')
+    li_ceramic.set_density('g/cm3', li_ceramic_density)
+    li_ceramic.depletable = True
 
-    clad = openmc.Material(name='Zircaloy-4')
-    clad.set_density('g/cm3', clad_density)
-    clad.add_element('Zr', 0.98, 'wo')
-    clad.add_element('Sn', 0.015, 'wo')
-    clad.add_element('Fe', 0.002, 'wo')
-    clad.add_element('Cr', 0.001, 'wo')
-    clad.add_element('Ni', 0.0007, 'wo')
+    # Eurofer-97 RAFM steel
+    eurofer_97 = openmc.Material(name='Eurofer97')
+    eurofer_97.add_element('C',  0.11)
+    eurofer_97.add_element('Cr', 9.0)
+    eurofer_97.add_element('W',  1.1)
+    eurofer_97.add_element('Mn', 0.4)
+    eurofer_97.add_element('Ta', 0.12)
+    eurofer_97.add_nuclide('N14', 0.03)
+    eurofer_97.add_element('Fe', 91.24)
+    eurofer_97.set_density('g/cm3', 7.798)
+    eurofer_97.depletable = False
 
-    water = openmc.Material(name='H2O moderator')
-    water.set_density('g/cm3', mod_density)
-    water.add_element('H', 2.0)
-    water.add_element('O', 1.0)
-    water.add_s_alpha_beta('c_H_in_H2O')
+    # Natural lithium target
+    li_target = openmc.Material(name='Lithium')
+    li_target.add_element('Li', 1.0)
+    li_target.set_density('g/cm3', 0.534)
+    li_target.depletable = False
 
-    materials = openmc.Materials([fuel, clad, water])
+    # Copper
+    cu = openmc.Material(name='Copper')
+    cu.add_element('Cu', 1.0)
+    cu.set_density('g/cm3', 8.96)
+    cu.depletable = False
 
-    # ── Geometry ─────────────────────────────────────────────────────────────
-    fuel_cyl = openmc.ZCylinder(r=fuel_r)
-    clad_inner = openmc.ZCylinder(r=clad_ir)
-    clad_outer = openmc.ZCylinder(r=clad_or)
+    # Titanium
+    ti_mat = openmc.Material(name='Titanium')
+    ti_mat.add_element('Ti', 1.0)
+    ti_mat.set_density('g/cm3', 4.506)
+    ti_mat.depletable = False
 
-    half_pitch = pitch / 2.0
-    left = openmc.XPlane(-half_pitch, boundary_type='reflective')
-    right = openmc.XPlane(+half_pitch, boundary_type='reflective')
-    bottom = openmc.YPlane(-half_pitch, boundary_type='reflective')
-    top = openmc.YPlane(+half_pitch, boundary_type='reflective')
+    # Water coolant with thermal scattering
+    h2o = openmc.Material(name='Water')
+    h2o.add_nuclide('H1',  2.0)
+    h2o.add_nuclide('O16', 1.0)
+    h2o.add_s_alpha_beta('c_H_in_H2O')
+    h2o.set_density('g/cm3', 1.0)
+    h2o.depletable = False
 
-    fuel_region = -fuel_cyl
-    gap_region = +fuel_cyl & -clad_inner
-    clad_region = +clad_inner & -clad_outer
-    mod_region = +clad_outer & +left & -right & +bottom & -top
+    # Graphite shielding
+    graphite = openmc.Material(name='Graphite')
+    graphite.add_element('C', 1.0)
+    graphite.set_density('g/cm3', 2.1)
+    graphite.depletable = False
 
-    fuel_cell = openmc.Cell(fill=fuel, region=fuel_region, name='fuel')
-    gap_cell = openmc.Cell(region=gap_region, name='gap')      # void gap
-    clad_cell = openmc.Cell(fill=clad, region=clad_region, name='clad')
-    mod_cell = openmc.Cell(fill=water, region=mod_region, name='moderator')
+    # Air
+    air = openmc.Material(name='Air')
+    air.add_element('N',  0.78)
+    air.add_element('O',  0.21)
+    air.add_element('Ar', 0.01)
+    air.set_density('g/cm3', 1.225e-3)
+    air.depletable = False
 
-    universe = openmc.Universe(cells=[fuel_cell, gap_cell, clad_cell, mod_cell])
-    geometry = openmc.Geometry(universe)
+    materials = openmc.Materials(
+        [li_ceramic, li_target, cu, ti_mat, h2o, graphite, air, eurofer_97])
+
+    # ── Surfaces ─────────────────────────────────────────────────────────────
+    # Target wheel cylinder (z-axis)
+    cylinder = openmc.ZCylinder(r=wh_r)
+
+    # Z-planes for target layer boundaries
+    z_li_lo    = -li_thickness / 2
+    z_li_hi    =  li_thickness / 2
+    z_cu1_hi   = z_li_hi + cu_thickness
+    z_water_hi = z_cu1_hi + water_thickness
+    z_cu2_hi   = z_water_hi + cu_thickness
+    z_vac1_hi  = z_cu2_hi + vacuum_thickness_1
+    z_graph_hi = z_vac1_hi + graphite_thickness
+    z_vac2_hi  = z_graph_hi + vacuum_thickness_2
+    z_ti_hi    = z_vac2_hi + ti_thickness
+
+    li_start   = openmc.ZPlane(z0=z_li_lo)
+    li_end     = openmc.ZPlane(z0=z_li_hi)
+    cu_1_end   = openmc.ZPlane(z0=z_cu1_hi)
+    water_end  = openmc.ZPlane(z0=z_water_hi)
+    cu_2_end   = openmc.ZPlane(z0=z_cu2_hi)
+    vac_1_end  = openmc.ZPlane(z0=z_vac1_hi)
+    graph_end  = openmc.ZPlane(z0=z_graph_hi)
+    vac_2_end  = openmc.ZPlane(z0=z_vac2_hi)
+    ti_end     = openmc.ZPlane(z0=z_ti_hi)
+
+    # TBM z-offset (starts after air gap)
+    base_case = z_ti_hi + air_gap
+
+    # TBM casing surfaces
+    casing_start  = openmc.ZPlane(z0=base_case)
+    casing_end    = openmc.ZPlane(z0=base_case + tbm_thickness)
+    casing_left   = openmc.XPlane(x0=-(tbm_width / 2 + eurofer_thickness))
+    casing_right  = openmc.XPlane(x0= (tbm_width / 2 + eurofer_thickness))
+    casing_bottom = openmc.YPlane(y0=tbm_position_y - (tbm_height / 2 + eurofer_thickness))
+    casing_top    = openmc.YPlane(y0=tbm_position_y + (tbm_height / 2 + eurofer_thickness))
+
+    # TBM inner (ceramic) surfaces
+    inner_start  = openmc.ZPlane(z0=base_case + eurofer_thickness)
+    inner_end    = openmc.ZPlane(z0=base_case + tbm_thickness - eurofer_thickness)
+    inner_left   = openmc.XPlane(x0=-tbm_width / 2)
+    inner_right  = openmc.XPlane(x0= tbm_width / 2)
+    inner_bottom = openmc.YPlane(y0=tbm_position_y - tbm_height / 2)
+    inner_top    = openmc.YPlane(y0=tbm_position_y + tbm_height / 2)
+
+    # Room boundary surfaces (vacuum boundary conditions)
+    back_wall  = openmc.ZPlane(z0=-50.0,  boundary_type='vacuum')
+    front_wall = openmc.ZPlane(z0=250.0,  boundary_type='vacuum')
+    left_wall  = openmc.XPlane(x0=-150.0, boundary_type='vacuum')
+    right_wall = openmc.XPlane(x0= 150.0, boundary_type='vacuum')
+    floor      = openmc.YPlane(y0=-100.0, boundary_type='vacuum')
+    ceiling    = openmc.YPlane(y0= 100.0, boundary_type='vacuum')
+
+    # ── Cells ─────────────────────────────────────────────────────────────────
+    # Target layer cells (inside wheel cylinder, in target z-range)
+    li_target_cell  = openmc.Cell(name='Li_cell',      fill=li_target,
+                                  region=-cylinder & +li_start  & -li_end)
+    cu_cell_1       = openmc.Cell(name='Cu_cell_1',    fill=cu,
+                                  region=-cylinder & +li_end     & -cu_1_end)
+    water_cell      = openmc.Cell(name='water_cell',   fill=h2o,
+                                  region=-cylinder & +cu_1_end   & -water_end)
+    cu_cell_2       = openmc.Cell(name='Cu_cell_2',    fill=cu,
+                                  region=-cylinder & +water_end  & -cu_2_end)
+    vac_cell_1      = openmc.Cell(name='vac_cell_1',   fill=None,
+                                  region=-cylinder & +cu_2_end   & -vac_1_end)
+    graphite_cell   = openmc.Cell(name='graphite_cell',fill=graphite,
+                                  region=-cylinder & +vac_1_end  & -graph_end)
+    vac_cell_2      = openmc.Cell(name='vac_cell_2',   fill=None,
+                                  region=-cylinder & +graph_end  & -vac_2_end)
+    ti_cell         = openmc.Cell(name='ti_cell',      fill=ti_mat,
+                                  region=-cylinder & +vac_2_end  & -ti_end)
+
+    # TBM regions
+    inner_region  = (+inner_left & -inner_right & +inner_bottom & -inner_top
+                     & +inner_start & -inner_end)
+    casing_region = (+casing_left & -casing_right & +casing_bottom & -casing_top
+                     & +casing_start & -casing_end & ~inner_region)
+    casing_cell = openmc.Cell(name='casing_cell', fill=eurofer_97,
+                              region=casing_region)
+
+    # The "wheel_region" is the target layer region inside the cylinder.
+    # This is excluded from the room so that the room only fills outside the
+    # cylinder target layers (and outside the TBM).
+    wheel_region = -cylinder & +li_start & -ti_end
+
+    # Room cell: air everywhere outside the wheel target layers and TBM
+    room_region = (+back_wall & -front_wall & +left_wall & -right_wall
+                   & +floor & -ceiling
+                   & ~wheel_region & ~casing_region & ~inner_region)
+    room_cell = openmc.Cell(name='room_cell', fill=air, region=room_region)
+
+    # Base cell list (target cells, casing, room – without TBM inner filling)
+    base_cells = [
+        li_target_cell, cu_cell_1, water_cell, cu_cell_2,
+        vac_cell_1, graphite_cell, vac_cell_2, ti_cell,
+        casing_cell, room_cell,
+    ]
+
+    # ── TBM ceramic fill ──────────────────────────────────────────────────────
+    if pebbles_or_monoblock == 'monoblock':
+        inner_cell = openmc.Cell(name='inner_cell', fill=li_ceramic,
+                                 region=inner_region)
+        all_cells = base_cells + [inner_cell]
+
+    else:  # pebble bed
+        sphere_locations = openmc.model.pack_spheres(
+            region=inner_region,
+            radius=pebble_radius,
+            pf=packing_fraction,
+        )
+        print(f"Packed {len(sphere_locations)} pebbles "
+              f"(r={pebble_radius} cm, pf={packing_fraction})")
+
+        # One Li2TiO3 cell per pebble (inside sphere)
+        pebble_surfaces = []
+        pebble_cells = []
+        for loc in sphere_locations:
+            sph = openmc.Sphere(x0=float(loc[0]), y0=float(loc[1]),
+                                z0=float(loc[2]), r=pebble_radius)
+            pebble_surfaces.append(sph)
+            pebble_cells.append(openmc.Cell(fill=li_ceramic, region=-sph))
+
+        # Air fills the space between pebbles inside the TBM
+        air_between = inner_region
+        for sph in pebble_surfaces:
+            air_between = air_between & (+sph)
+        inner_cell = openmc.Cell(name='inner_cell', fill=air, region=air_between)
+
+        all_cells = base_cells + pebble_cells + [inner_cell]
+
+    geometry = openmc.Geometry(all_cells)
 
     # ── Settings ─────────────────────────────────────────────────────────────
     settings = openmc.Settings()
-    settings.batches = batches
-    settings.inactive = inactive
+    settings.batches   = batches
     settings.particles = particles
-    settings.seed = seed
-    settings.run_mode = 'eigenvalue'
+    settings.seed      = seed
+    settings.run_mode  = 'fixed source'
 
-    # Uniform spatial source in the fuel
-    bounds = [-fuel_r, -fuel_r, -1.0, fuel_r, fuel_r, 1.0]
-    uniform_dist = openmc.stats.Box(bounds[:3], bounds[3:])
-    settings.source = openmc.IndependentSource(
-        space=uniform_dist,
-        constraints={'fissionable': True},
-    )
+    # 14.1 MeV isotropic neutron source inside the Li target disk
+    source_lo = [-(wh_r - 1.0), -(wh_r - 1.0), z_li_lo]
+    source_hi = [+(wh_r - 1.0), +(wh_r - 1.0), z_li_hi]
+    space  = openmc.stats.Box(source_lo, source_hi)
+    energy = openmc.stats.Discrete([14.1e6], [1.0])
+    settings.source = openmc.IndependentSource(space=space, energy=energy)
 
     # ── Tallies ───────────────────────────────────────────────────────────────
-    tallies = openmc.Tallies()
+    # Score (n,t) reactions in the Li2TiO3 ceramic to get TBR per source neutron
+    tally = openmc.Tally(name='tritium_production')
+    tally.filters = [openmc.MaterialFilter([li_ceramic])]
+    tally.scores  = ['(n,t)']
+    tallies = openmc.Tallies([tally])
 
     # ── Assemble model ────────────────────────────────────────────────────────
     model = openmc.Model(
@@ -180,7 +348,8 @@ def extract_qois(statepoint_file, qoi_names):
     statepoint_file : str
         Path to the statepoint HDF5 file written by OpenMC.
     qoi_names : list[str]
-        Names of QoIs requested in the config (currently only 'k_eff').
+        Names of QoIs requested in the config.
+        Supported: ``'tritium_production_rate'``, ``'k_eff'``.
 
     Returns
     -------
@@ -195,6 +364,17 @@ def extract_qois(statepoint_file, qoi_names):
             k_combined = sp.keff
             results['k_eff'] = float(k_combined.n)
             print(f"  k_eff = {k_combined}")
+
+        if 'tritium_production_rate' in qoi_names:
+            try:
+                tally = sp.get_tally(name='tritium_production')
+                df  = tally.get_pandas_dataframe()
+                tpr = float(df['mean'].sum())
+                results['tritium_production_rate'] = tpr
+                print(f"  tritium_production_rate = {tpr:.4e}")
+            except Exception as exc:
+                print(f"  Warning: could not extract tritium_production_rate: {exc}")
+                results['tritium_production_rate'] = 0.0
 
     return results
 
@@ -228,10 +408,10 @@ def _get_mean(value):
 # ---------------------------------------------------------------------------
 
 def main():
-    print("\n ! Entering OpenMC EasyVVUQ model wrapper !\n")
+    print("\n ! Entering OpenMC EasyVVUQ model wrapper (TBM pebble-bed) !\n")
 
     parser = argparse.ArgumentParser(
-        description='Run OpenMC pin-cell model with YAML configuration'
+        description='Run OpenMC TBM pebble-bed model with YAML configuration'
     )
     parser.add_argument(
         '--config', '-c',

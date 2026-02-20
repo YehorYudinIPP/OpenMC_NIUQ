@@ -1,5 +1,19 @@
 """
-easyvvuq_openmc.py – EasyVVUQ forward uncertainty propagation for OpenMC.
+easyvvuq_openmc.py – EasyVVUQ forward uncertainty propagation for OpenMC TBM.
+
+Propagates uncertainties through an OpenMC fixed-source neutron irradiation
+model of a Test Blanket Module (TBM) with Li2TiO3 ceramic pebbles.
+
+Uncertain parameters
+--------------------
+* ``li_ceramic_density``  – Li2TiO3 pebble density (g/cm³)
+* ``li6_enrichment``      – Li-6 enrichment in the ceramic (at%)
+* ``pebble_radius``       – pebble radius (cm)
+* ``packing_fraction``    – pebble packing fraction
+
+Quantity of interest (QoI)
+--------------------------
+* ``tritium_production_rate`` – tritium nuclei produced per source neutron (TBR)
 
 Supports two UQ methods:
   * Polynomial Chaos Expansion (PCE) via ``uq_scheme: pce``
@@ -62,18 +76,18 @@ def define_model_parameters():
     """
     Return the EasyVVUQ parameter dictionary and the list of QoI column names.
 
-    The parameters dict maps each uncertain input to its EasyVVUQ type
+    The parameters dict maps each uncertain TBM input to its EasyVVUQ type
     specification and default value.
     """
     parameters = {
-        "fuel_radius": {"type": "float", "default": 0.41},
-        "fuel_density": {"type": "float", "default": 10.5},
-        "enrichment":   {"type": "float", "default": 3.1},
-        "mod_density":  {"type": "float", "default": 0.7},
+        "li_ceramic_density": {"type": "float", "default": 3.43},
+        "li6_enrichment":     {"type": "float", "default": 7.5},
+        "pebble_radius":      {"type": "float", "default": 0.1},
+        "packing_fraction":   {"type": "float", "default": 0.3},
     }
 
     # QoI column names must match the CSV header written by openmc_model_run.py
-    qois = ["k_eff"]
+    qois = ["tritium_production_rate"]
 
     return parameters, qois
 
@@ -104,10 +118,10 @@ def define_parameter_distributions(config, cov_override=None, dist_override=None
         return node.get(key, {}) if isinstance(node, dict) else {}
 
     spec = {
-        "fuel_radius": _v(geom, 'fuel_radius'),
-        "fuel_density": _v(_v(mat, 'fuel'), 'density'),
-        "enrichment":   _v(_v(mat, 'fuel'), 'enrichment'),
-        "mod_density":  _v(_v(mat, 'moderator'), 'density'),
+        "li_ceramic_density": _v(_v(mat, 'li_ceramic'), 'density'),
+        "li6_enrichment":     _v(_v(mat, 'li_ceramic'), 'li6_enrichment'),
+        "pebble_radius":      _v(geom, 'pebble_radius'),
+        "packing_fraction":   _v(geom, 'packing_fraction'),
     }
 
     _dist_map = {
@@ -164,16 +178,16 @@ def prepare_uq_campaign(config, config_file, fixed_params=None, uq_params=None):
         template_fname=config_file,
         target_filename="config.yaml",
         parameter_map={
-            "fuel_radius":   "geometry.fuel_radius.mean",
-            "fuel_density":  "materials.fuel.density.mean",
-            "enrichment":    "materials.fuel.enrichment.mean",
-            "mod_density":   "materials.moderator.density.mean",
+            "li_ceramic_density": "materials.li_ceramic.density.mean",
+            "li6_enrichment":     "materials.li_ceramic.li6_enrichment.mean",
+            "pebble_radius":      "geometry.pebble_radius.mean",
+            "packing_fraction":   "geometry.packing_fraction.mean",
         },
         type_conversions={
-            "fuel_radius":  float,
-            "fuel_density": float,
-            "enrichment":   float,
-            "mod_density":  float,
+            "li_ceramic_density": float,
+            "li6_enrichment":     float,
+            "pebble_radius":      float,
+            "packing_fraction":   float,
         },
         fixed_parameters=fixed_params or {},
     )
