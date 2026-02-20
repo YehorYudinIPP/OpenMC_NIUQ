@@ -20,8 +20,12 @@ The OpenMC model represents a compact accelerator-driven neutron source with:
 
 Run mode is **fixed source**: 14.1 MeV DT-fusion neutrons inside the Li target.
 
-**Quantity of interest (QoI)**: tritium breeding ratio (TBR) – tritium nuclei
-produced per source neutron via ⁶Li(n,t)⁴He reactions in the Li₂TiO₃ ceramic.
+**Quantities of interest (QoIs)**:
+
+* **`tritium_production_rate`** – tritium breeding ratio (TBR): tritium nuclei
+  produced per source neutron via ⁶Li(n,t)⁴He reactions in the Li₂TiO₃ ceramic.
+* **`total_neutron_flux`** – total neutron flux intensity integrated over all
+  materials (per source neutron).
 
 **Uncertain parameters** for the UQ campaign:
 
@@ -31,6 +35,7 @@ produced per source neutron via ⁶Li(n,t)⁴He reactions in the Li₂TiO₃ cer
 | `li6_enrichment` | Li-6 at% in the ceramic | 7.5 | Normal, CoV 5% |
 | `pebble_radius` | pebble radius (cm) | 0.10 | Normal, CoV 5% |
 | `packing_fraction` | random packing fraction | 0.30 | Uniform, CoV 5% |
+| `graphite_thickness` | graphite shielding layer thickness in the target (cm) | 0.70 | Normal, CoV 5% |
 
 ## Repository structure
 

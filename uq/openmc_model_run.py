@@ -56,8 +56,8 @@ def build_openmc_model(config):
       * Room: air-filled box with vacuum boundary conditions.
 
     Run mode : fixed source (14.1 MeV DT-fusion neutrons in the Li target).
-    QoI      : tritium production rate (reactions per source neutron) in the
-               Li2TiO3 ceramic.
+    QoIs     : tritium production rate (reactions per source neutron) in the
+               Li2TiO3 ceramic; total neutron flux across all materials.
     """
     import openmc
 
