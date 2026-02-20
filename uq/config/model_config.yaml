@@ -50,6 +50,27 @@ materials:
       relative_stdev: 0.05
       pdf: normal
 
+  li_target:
+    name: Lithium
+    density:                    # g/cm³ – natural Li target density
+      mean: 0.534
+      relative_stdev: 0.02
+      pdf: normal
+
+  water:
+    name: Water
+    density:                    # g/cm³ – water coolant density (neutron moderation)
+      mean: 1.0
+      relative_stdev: 0.02
+      pdf: normal
+
+  graphite:
+    name: Graphite
+    density:                    # g/cm³ – graphite shielding density (neutron moderation)
+      mean: 2.1
+      relative_stdev: 0.03
+      pdf: normal
+
 # ── Simulation settings ───────────────────────────────────────────────────────
 simulation:
   run_mode: fixed_source        # neutron irradiation experiment
@@ -63,4 +84,5 @@ output:
   results_file: results.csv
   qoi:
     - tritium_production_rate   # T nuclei produced per source neutron (TBR)
+    - total_neutron_flux        # total neutron flux intensity (n/cm²/s per source neutron)
 

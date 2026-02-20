@@ -95,6 +95,12 @@ def build_openmc_model(config):
         _get_mean(mat_cfg.get('li_ceramic', {}).get('density',        3.43)))
     li6_enrichment     = float(
         _get_mean(mat_cfg.get('li_ceramic', {}).get('li6_enrichment', 7.5)))
+    li_target_density  = float(
+        _get_mean(mat_cfg.get('li_target',  {}).get('density',        0.534)))
+    water_density      = float(
+        _get_mean(mat_cfg.get('water',      {}).get('density',        1.0)))
+    graphite_density   = float(
+        _get_mean(mat_cfg.get('graphite',   {}).get('density',        2.1)))
 
     # ── Simulation settings ──────────────────────────────────────────────────
     particles  = int(sim_cfg.get('particles', 10000))
@@ -131,7 +137,7 @@ def build_openmc_model(config):
     # Natural lithium target
     li_target = openmc.Material(name='Lithium')
     li_target.add_element('Li', 1.0)
-    li_target.set_density('g/cm3', 0.534)
+    li_target.set_density('g/cm3', li_target_density)
     li_target.depletable = False
 
     # Copper
@@ -151,13 +157,13 @@ def build_openmc_model(config):
     h2o.add_nuclide('H1',  2.0)
     h2o.add_nuclide('O16', 1.0)
     h2o.add_s_alpha_beta('c_H_in_H2O')
-    h2o.set_density('g/cm3', 1.0)
+    h2o.set_density('g/cm3', water_density)
     h2o.depletable = False
 
     # Graphite shielding
     graphite = openmc.Material(name='Graphite')
     graphite.add_element('C', 1.0)
-    graphite.set_density('g/cm3', 2.1)
+    graphite.set_density('g/cm3', graphite_density)
     graphite.depletable = False
 
     # Air
@@ -321,7 +327,12 @@ def build_openmc_model(config):
     tally = openmc.Tally(name='tritium_production')
     tally.filters = [openmc.MaterialFilter([li_ceramic])]
     tally.scores  = ['(n,t)']
-    tallies = openmc.Tallies([tally])
+
+    # Score total neutron flux across all materials
+    flux_tally = openmc.Tally(name='total_neutron_flux')
+    flux_tally.scores = ['flux']
+
+    tallies = openmc.Tallies([tally, flux_tally])
 
     # ── Assemble model ────────────────────────────────────────────────────────
     model = openmc.Model(
@@ -348,7 +359,7 @@ def extract_qois(statepoint_file, qoi_names):
         Path to the statepoint HDF5 file written by OpenMC.
     qoi_names : list[str]
         Names of QoIs requested in the config.
-        Supported: ``'tritium_production_rate'``, ``'k_eff'``.
+        Supported: ``'tritium_production_rate'``, ``'total_neutron_flux'``, ``'k_eff'``.
 
     Returns
     -------
@@ -374,6 +385,17 @@ def extract_qois(statepoint_file, qoi_names):
             except Exception as exc:
                 print(f"  Warning: could not extract tritium_production_rate: {exc}")
                 results['tritium_production_rate'] = 0.0
+
+        if 'total_neutron_flux' in qoi_names:
+            try:
+                tally = sp.get_tally(name='total_neutron_flux')
+                df  = tally.get_pandas_dataframe()
+                flux = float(df['mean'].sum())
+                results['total_neutron_flux'] = flux
+                print(f"  total_neutron_flux = {flux:.4e}")
+            except Exception as exc:
+                print(f"  Warning: could not extract total_neutron_flux: {exc}")
+                results['total_neutron_flux'] = 0.0
 
     return results
 
