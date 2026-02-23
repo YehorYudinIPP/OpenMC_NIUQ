@@ -8,6 +8,7 @@ tests run without OpenMC or a real UQ campaign.
 import os
 import shutil
 import tempfile
+import pickle
 
 import numpy as np
 import pytest
@@ -25,6 +26,7 @@ from visualisation import (
     plot_sobol_indices,
     visualise_results,
 )
+from visualise_uq_results import main as visualise_main
 
 
 # ---------------------------------------------------------------------------
@@ -162,3 +164,51 @@ class TestVisualiseResults:
             assert len(files) > 0
         finally:
             shutil.rmtree(out, ignore_errors=True)
+
+
+class TestVisualiseUqResultsScript:
+    """Tests for the standalone visualise_uq_results.py script."""
+
+    def test_main_with_results_pickle(self, mock_results, tmp_dir):
+        """main() loads a pickled results file and generates plots."""
+        pkl_path = os.path.join(tmp_dir, "results.pickle")
+        with open(pkl_path, "wb") as fh:
+            pickle.dump(mock_results, fh)
+
+        out_dir = os.path.join(tmp_dir, "standalone_plots")
+        files = visualise_main(pkl_path, output_dir=out_dir)
+        assert os.path.isdir(out_dir)
+        assert len(files) > 0
+        for f in files:
+            assert os.path.isfile(f)
+            assert f.endswith(".png")
+
+    def test_main_with_config_pickle(self, mock_results, tmp_dir):
+        """main() accepts an optional campaign config pickle."""
+        results_pkl = os.path.join(tmp_dir, "results.pickle")
+        with open(results_pkl, "wb") as fh:
+            pickle.dump(mock_results, fh)
+
+        # Config dict that matches model_config.yaml structure
+        config = {
+            "geometry": {
+                "pebble_radius": {"mean": 0.1, "relative_stdev": 0.05, "pdf": "normal"},
+                "packing_fraction": {"mean": 0.3, "relative_stdev": 0.05, "pdf": "uniform"},
+                "graphite_thickness": {"mean": 0.7, "relative_stdev": 0.05, "pdf": "normal"},
+            },
+            "materials": {
+                "li_ceramic": {
+                    "density": {"mean": 3.43, "relative_stdev": 0.02, "pdf": "normal"},
+                    "li6_enrichment": {"mean": 7.5, "relative_stdev": 0.05, "pdf": "normal"},
+                },
+            },
+        }
+        config_pkl = os.path.join(tmp_dir, "config.pickle")
+        with open(config_pkl, "wb") as fh:
+            pickle.dump(config, fh)
+
+        out_dir = os.path.join(tmp_dir, "standalone_plots_cfg")
+        files = visualise_main(results_pkl, config_file=config_pkl,
+                               output_dir=out_dir)
+        assert os.path.isdir(out_dir)
+        assert len(files) > 0
