@@ -80,11 +80,10 @@ def plot_qoi_statistics(results, qois, output_dir):
     labels = []
 
     for qoi in qois:
-        desc = results.describe(qoi)
-        mean_val = float(np.squeeze(desc["mean"]))
-        std_val = float(np.squeeze(desc["std"]))
-        p10_val = float(np.squeeze(desc["10%"]))
-        p90_val = float(np.squeeze(desc["90%"]))
+        mean_val = float(np.squeeze(results.describe(qoi, "mean")))
+        std_val = float(np.squeeze(results.describe(qoi, "std")))
+        p10_val = float(np.squeeze(results.describe(qoi, "10%")))
+        p90_val = float(np.squeeze(results.describe(qoi, "90%")))
 
         means.append(mean_val)
         stds.append(std_val)
@@ -92,26 +91,29 @@ def plot_qoi_statistics(results, qois, output_dir):
         p90s.append(p90_val)
         labels.append(_label_for_qoi(qoi))
 
-    x = np.arange(len(qois))
-    fig, ax = plt.subplots(figsize=(max(6, 3 * len(qois)), 5))
+    n_qois = len(qois)
+    fig, axes = plt.subplots(1, n_qois, figsize=(max(6, 5 * n_qois), 5))
+    if n_qois == 1:
+        axes = [axes]
 
-    # Bars with ±1 std error bars
-    ax.bar(x, means, yerr=stds, capsize=8, color=_PRIMARY_COLOR,
-                  edgecolor="black", alpha=0.85, label=r"Mean $\pm$ 1 $\sigma$")
+    for i, ax in enumerate(axes):
+        ax.bar([0], [means[i]], yerr=[stds[i]], capsize=8,
+               color=_PRIMARY_COLOR, edgecolor="black", alpha=0.85,
+               label=r"Mean $\pm$ 1 $\sigma$")
 
-    # 10–90% whiskers as thin error bars
-    lower_err = [m - p for m, p in zip(means, p10s)]
-    upper_err = [p - m for m, p in zip(means, p90s)]
-    ax.errorbar(x, means, yerr=[lower_err, upper_err], fmt="none",
-                ecolor="grey", elinewidth=1.5, capsize=5,
-                label="10 %–90 % range")
+        lower_err = means[i] - p10s[i]
+        upper_err = p90s[i] - means[i]
+        ax.errorbar([0], [means[i]], yerr=[[lower_err], [upper_err]],
+                    fmt="none", ecolor="grey", elinewidth=1.5, capsize=5,
+                    label="10 %–90 % range")
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels, fontsize=11)
-    ax.set_ylabel("Value", fontsize=12)
-    ax.set_title("QoI Statistics", fontsize=14)
-    ax.legend(fontsize=10)
-    ax.grid(axis="y", linestyle="--", alpha=0.5)
+        ax.set_xticks([0])
+        ax.set_xticklabels([labels[i]], fontsize=11)
+        ax.set_ylabel("Value", fontsize=12)
+        ax.set_title(labels[i], fontsize=14)
+        ax.legend(fontsize=10)
+        ax.grid(axis="y", linestyle="--", alpha=0.5)
+
     fig.tight_layout()
 
     filepath = os.path.join(output_dir, "qoi_statistics.png")
