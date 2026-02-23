@@ -7,7 +7,7 @@ model of a Test Blanket Module (TBM) with Li2TiO3 ceramic pebbles.
 Uncertain parameters
 --------------------
 * ``li_ceramic_density``  – Li2TiO3 pebble density (g/cm³)
-* ``li6_enrichment``      – Li-6 enrichment in the ceramic (at%)
+* ``li6_enrichment``      – Li-6 enrichment in the ceramic (at%) - deactivated
 * ``pebble_radius``       – pebble radius (cm)
 * ``packing_fraction``    – pebble packing fraction
 * ``graphite_thickness``  – graphite shielding layer thickness in the target (cm)
@@ -82,10 +82,10 @@ def define_model_parameters():
     """
     parameters = {
         "li_ceramic_density": {"type": "float", "default": 3.43},
-        "li6_enrichment":     {"type": "float", "default": 7.5},
+        # "li6_enrichment":     {"type": "float", "default": 7.5},
         "pebble_radius":      {"type": "float", "default": 0.1},
-        "packing_fraction":   {"type": "float", "default": 0.3},
-        "graphite_thickness": {"type": "float", "default": 0.7},
+        # "packing_fraction":   {"type": "float", "default": 0.3},
+        # "graphite_thickness": {"type": "float", "default": 0.7},
     }
 
     # QoI column names must match the CSV header written by openmc_model_run.py
@@ -121,10 +121,10 @@ def define_parameter_distributions(config, cov_override=None, dist_override=None
 
     spec = {
         "li_ceramic_density": _v(_v(mat, 'li_ceramic'), 'density'),
-        "li6_enrichment":     _v(_v(mat, 'li_ceramic'), 'li6_enrichment'),
+        # "li6_enrichment":     _v(_v(mat, 'li_ceramic'), 'li6_enrichment'),
         "pebble_radius":      _v(geom, 'pebble_radius'),
-        "packing_fraction":   _v(geom, 'packing_fraction'),
-        "graphite_thickness": _v(geom, 'graphite_thickness'),
+        # "packing_fraction":   _v(geom, 'packing_fraction'),
+        # "graphite_thickness": _v(geom, 'graphite_thickness'),
     }
 
     _dist_map = {
@@ -182,17 +182,17 @@ def prepare_uq_campaign(config, config_file, fixed_params=None, uq_params=None):
         target_filename="config.yaml",
         parameter_map={
             "li_ceramic_density": "materials.li_ceramic.density.mean",
-            "li6_enrichment":     "materials.li_ceramic.li6_enrichment.mean",
+            # "li6_enrichment":     "materials.li_ceramic.li6_enrichment.mean",
             "pebble_radius":      "geometry.pebble_radius.mean",
-            "packing_fraction":   "geometry.packing_fraction.mean",
-            "graphite_thickness": "geometry.graphite_thickness.mean",
+            # "packing_fraction":   "geometry.packing_fraction.mean",
+            # "graphite_thickness": "geometry.graphite_thickness.mean",
         },
         type_conversions={
             "li_ceramic_density": float,
-            "li6_enrichment":     float,
+            # "li6_enrichment":     float,
             "pebble_radius":      float,
-            "packing_fraction":   float,
-            "graphite_thickness": float,
+            # "packing_fraction":   float,
+            # "graphite_thickness": float,
         },
         fixed_parameters=fixed_params or {},
     )
