@@ -49,6 +49,8 @@ uq/
 │   └── __init__.py
 ├── openmc_model_run.py          # Builds and runs an OpenMC model; writes QoIs to CSV
 ├── easyvvuq_openmc.py           # Main EasyVVUQ UQ script (PCE and QMC)
+├── visualisation.py             # Post-campaign plotting (QoI stats, Sobol indices)
+├── visualise_uq_results.py      # Standalone re-visualisation from saved results
 └── __init__.py
 ```
 
@@ -57,7 +59,7 @@ uq/
 - [OpenMC](https://openmc.org/) (≥ 0.14)
 - [EasyVVUQ](https://github.com/UCL-CCS/EasyVVUQ) (≥ 1.2)
 - [chaospy](https://github.com/jonathf/chaospy)
-- numpy, pyyaml
+- numpy, pyyaml, matplotlib
 
 Install with conda + pip:
 
@@ -102,6 +104,28 @@ python easyvvuq_openmc.py --uq-scheme qmc --n-samples 256
 
 ```bash
 python openmc_model_run.py --config config/model_config.yaml
+```
+
+### Visualisation
+
+Plots of QoI statistics and Sobol sensitivity indices are generated
+automatically at the end of the UQ campaign and saved as PNG images in a
+timestamped folder (`plots_openmc_uq_<timestamp>/`).
+
+To **re-generate plots** from previously saved results without re-running the
+campaign, use the standalone visualisation script:
+
+```bash
+# Minimum: provide the analysis results pickle
+python visualise_uq_results.py --results analysis_results_openmc_uq_20250720_143025.pickle
+
+# Optionally include the campaign config for exact parameter distribution info
+python visualise_uq_results.py --results analysis_results_openmc_uq_20250720_143025.pickle \
+                               --config uq_campaign_config_20250720_143025.pickle
+
+# Save plots to a custom directory
+python visualise_uq_results.py --results analysis_results_openmc_uq_20250720_143025.pickle \
+                               --output-dir my_plots
 ```
 
 ## Configuration

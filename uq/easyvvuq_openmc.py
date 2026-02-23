@@ -67,6 +67,7 @@ from util.utils import (
     load_config,
     validate_execution_setup,
 )
+from visualisation import visualise_results
 
 
 # ---------------------------------------------------------------------------
@@ -386,6 +387,9 @@ def perform_uq_openmc(config_file=None, fixed_params=None, uq_params=None):
 
     # ── Analyse ───────────────────────────────────────────────────────────────
     results = analyse_uq_results(campaign, qois, sampler, uq_params=uq_params)
+
+    # ── Visualise ─────────────────────────────────────────────────────────────
+    visualise_results(results, qois, distributions, timestamp=timestamp)
 
     # Persist campaign config
     cfg_file = add_timestamp_to_filename("uq_campaign_config.pickle")
