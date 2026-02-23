@@ -39,6 +39,9 @@ _PARAM_LABELS = {
     "graphite_thickness": "Graphite Thickness",
 }
 
+_PRIMARY_COLOR = "#4C72B0"
+_SECONDARY_COLOR = "#DD8452"
+
 
 def _label_for_qoi(qoi):
     """Return a human-readable label for a QoI name."""
@@ -93,7 +96,7 @@ def plot_qoi_statistics(results, qois, output_dir):
     fig, ax = plt.subplots(figsize=(max(6, 3 * len(qois)), 5))
 
     # Bars with ±1 std error bars
-    bars = ax.bar(x, means, yerr=stds, capsize=8, color="#4C72B0",
+    ax.bar(x, means, yerr=stds, capsize=8, color=_PRIMARY_COLOR,
                   edgecolor="black", alpha=0.85, label=r"Mean $\pm$ 1 $\sigma$")
 
     # 10–90% whiskers as thin error bars
@@ -172,12 +175,12 @@ def plot_sobol_indices(results, qois, distributions, output_dir):
 
         if has_total:
             ax.bar(x - width / 2, s1_vals, width, label="First-order",
-                   color="#4C72B0", edgecolor="black", alpha=0.85)
+                   color=_PRIMARY_COLOR, edgecolor="black", alpha=0.85)
             ax.bar(x + width / 2, st_vals, width, label="Total",
-                   color="#DD8452", edgecolor="black", alpha=0.85)
+                   color=_SECONDARY_COLOR, edgecolor="black", alpha=0.85)
         else:
             ax.bar(x, s1_vals, width, label="First-order",
-                   color="#4C72B0", edgecolor="black", alpha=0.85)
+                   color=_PRIMARY_COLOR, edgecolor="black", alpha=0.85)
 
         ax.set_xticks(x)
         ax.set_xticklabels(param_labels, fontsize=10, rotation=25, ha="right")
@@ -233,7 +236,7 @@ def plot_qoi_distributions(results, qois, output_dir):
     for ax, qoi in zip(axes, qois):
         try:
             samples = np.squeeze(np.array(raw[qoi]))
-            ax.hist(samples, bins="auto", color="#4C72B0", edgecolor="black",
+            ax.hist(samples, bins="auto", color=_PRIMARY_COLOR, edgecolor="black",
                     alpha=0.75)
             ax.set_xlabel(_label_for_qoi(qoi), fontsize=11)
             ax.set_ylabel("Frequency", fontsize=11)
