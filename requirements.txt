@@ -15,3 +15,4 @@ chaospy >= 4.3
 # General scientific stack
 numpy
 pyyaml
+matplotlib
