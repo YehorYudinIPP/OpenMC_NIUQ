@@ -29,6 +29,10 @@ import numpy as np
 _QOI_LABELS = {
     "tritium_production_rate": "Tritium Production Rate (TBR)",
     "total_neutron_flux": "Total Neutron Flux",
+    "tbm_incident_flux": "TBM Incident Neutron Flux",
+    "tbm_inner_flux": "TBM Inner Neutron Flux",
+    "tbm_heating": "TBM Nuclear Heating",
+    "tbm_neutron_leakage": "TBM Neutron Leakage",
 }
 
 _PARAM_LABELS = {
