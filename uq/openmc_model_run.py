@@ -326,7 +326,33 @@ def build_openmc_model(config):
     flux_tally = openmc.Tally(name='total_neutron_flux')
     flux_tally.scores = ['flux']
 
-    tallies = openmc.Tallies([tally, flux_tally])
+    # Neutron flux incident on the TBM (surface current on TBM casing)
+    tbm_casing_surfaces = [casing_start, casing_end, casing_left,
+                           casing_right, casing_bottom, casing_top]
+    tbm_incident_tally = openmc.Tally(name='tbm_incident_flux')
+    tbm_incident_tally.filters = [openmc.SurfaceFilter(tbm_casing_surfaces)]
+    tbm_incident_tally.scores = ['current']
+
+    # Neutron flux inside the TBM (ceramic material)
+    tbm_inner_flux_tally = openmc.Tally(name='tbm_inner_flux')
+    tbm_inner_flux_tally.filters = [openmc.MaterialFilter([li_ceramic])]
+    tbm_inner_flux_tally.scores = ['flux']
+
+    # Heating in the TBM (energy deposition in ceramic)
+    tbm_heating_tally = openmc.Tally(name='tbm_heating')
+    tbm_heating_tally.filters = [openmc.MaterialFilter([li_ceramic])]
+    tbm_heating_tally.scores = ['heating']
+
+    # Neutron leakage from the TBM (net outward current on casing surfaces)
+    tbm_leakage_tally = openmc.Tally(name='tbm_neutron_leakage')
+    tbm_leakage_tally.filters = [openmc.SurfaceFilter(tbm_casing_surfaces)]
+    tbm_leakage_tally.scores = ['current']
+
+    tallies = openmc.Tallies([
+        tally, flux_tally,
+        tbm_incident_tally, tbm_inner_flux_tally,
+        tbm_heating_tally, tbm_leakage_tally,
+    ])
 
     # ── Assemble model ────────────────────────────────────────────────────────
     model = openmc.Model(
@@ -353,7 +379,9 @@ def extract_qois(statepoint_file, qoi_names):
         Path to the statepoint HDF5 file written by OpenMC.
     qoi_names : list[str]
         Names of QoIs requested in the config.
-        Supported: ``'tritium_production_rate'``, ``'total_neutron_flux'``, ``'k_eff'``.
+        Supported: ``'tritium_production_rate'``, ``'total_neutron_flux'``,
+        ``'tbm_incident_flux'``, ``'tbm_inner_flux'``, ``'tbm_heating'``,
+        ``'tbm_neutron_leakage'``, ``'k_eff'``.
 
     Returns
     -------
@@ -362,6 +390,16 @@ def extract_qois(statepoint_file, qoi_names):
     """
     import openmc
 
+    # Map QoI config names to their OpenMC tally names
+    _tally_map = {
+        'tritium_production_rate': 'tritium_production',
+        'total_neutron_flux':      'total_neutron_flux',
+        'tbm_incident_flux':       'tbm_incident_flux',
+        'tbm_inner_flux':          'tbm_inner_flux',
+        'tbm_heating':             'tbm_heating',
+        'tbm_neutron_leakage':     'tbm_neutron_leakage',
+    }
+
     results = {}
     with openmc.StatePoint(statepoint_file) as sp:
         if 'k_eff' in qoi_names:
@@ -369,27 +407,22 @@ def extract_qois(statepoint_file, qoi_names):
             results['k_eff'] = float(k_combined.n)
             print(f"  k_eff = {k_combined}")
 
-        if 'tritium_production_rate' in qoi_names:
+        for qoi in qoi_names:
+            if qoi == 'k_eff':
+                continue
+            tally_name = _tally_map.get(qoi)
+            if tally_name is None:
+                print(f"  Warning: unknown QoI '{qoi}' – skipping.")
+                continue
             try:
-                tally = sp.get_tally(name='tritium_production')
-                df  = tally.get_pandas_dataframe()
-                tpr = float(df['mean'].sum())
-                results['tritium_production_rate'] = tpr
-                print(f"  tritium_production_rate = {tpr:.4e}")
+                tally = sp.get_tally(name=tally_name)
+                df = tally.get_pandas_dataframe()
+                value = float(df['mean'].sum())
+                results[qoi] = value
+                print(f"  {qoi} = {value:.4e}")
             except Exception as exc:
-                print(f"  Warning: could not extract tritium_production_rate: {exc}")
-                results['tritium_production_rate'] = 0.0
-
-        if 'total_neutron_flux' in qoi_names:
-            try:
-                tally = sp.get_tally(name='total_neutron_flux')
-                df  = tally.get_pandas_dataframe()
-                flux = float(df['mean'].sum())
-                results['total_neutron_flux'] = flux
-                print(f"  total_neutron_flux = {flux:.4e}")
-            except Exception as exc:
-                print(f"  Warning: could not extract total_neutron_flux: {exc}")
-                results['total_neutron_flux'] = 0.0
+                print(f"  Warning: could not extract {qoi}: {exc}")
+                results[qoi] = 0.0
 
     return results
 
@@ -412,6 +445,16 @@ def _get_mean(value):
     """
     Return the mean/nominal value regardless of whether *value* is a plain
     scalar or a mapping that contains a 'mean' key (UQ-spec format).
+
+    This function is the single gateway for reading any parameter from the
+    YAML config.  When adding a **new** uncertain parameter you only need to:
+
+    1. Add it to ``model_config.yaml`` with ``mean`` / ``relative_stdev`` /
+       ``pdf`` keys (or as a plain scalar for a fixed parameter).
+    2. Read it in ``build_openmc_model()`` through ``_get_mean()``.
+
+    The UQ layer (``easyvvuq_openmc.py``) will auto-discover the parameter
+    from the config structure – no further code changes are required there.
     """
     if isinstance(value, dict):
         return value.get('mean', 0.0)

@@ -31,3 +31,6 @@ plots_openmc_uq_*/
 *.csv
 uq_campaign_config*.pickle
 analysis_results_openmc_uq*.pickle
+
+### Log files ###
+openmc_uq_campaign*.log
