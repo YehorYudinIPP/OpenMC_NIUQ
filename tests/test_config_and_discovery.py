@@ -186,7 +186,6 @@ class TestDefineModelParameters:
 
 class TestLogging:
     def test_setup_logging_creates_file(self):
-        import tempfile
         from easyvvuq_openmc import setup_logging
         with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as f:
             log_path = f.name

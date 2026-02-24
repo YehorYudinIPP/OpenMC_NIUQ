@@ -26,6 +26,10 @@ Run mode is **fixed source**: 14.1 MeV DT-fusion neutrons inside the Li target.
   produced per source neutron via ⁶Li(n,t)⁴He reactions in the Li₂TiO₃ ceramic.
 * **`total_neutron_flux`** – total neutron flux intensity integrated over all
   materials (per source neutron).
+* **`tbm_incident_flux`** – neutron current incident on TBM casing surfaces.
+* **`tbm_inner_flux`** – neutron flux inside the TBM (Li₂TiO₃ ceramic).
+* **`tbm_heating`** – nuclear heating in the TBM ceramic (eV/source neutron).
+* **`tbm_neutron_leakage`** – neutron leakage current from TBM casing surfaces.
 
 **Uncertain parameters** for the UQ campaign:
 
@@ -144,4 +148,30 @@ materials:
 ```
 
 Fixed parameters (no uncertainty) are plain scalar values.
+
+### Adding a new uncertain parameter
+
+Uncertain parameters are **auto-discovered** from the config file.  To add a
+new uncertain parameter to the UQ campaign:
+
+1. Express the parameter in `model_config.yaml` as a dictionary with `mean`,
+   `relative_stdev`, and `pdf` keys (instead of a plain scalar).
+2. In `openmc_model_run.py`, read the parameter value through the `_get_mean()`
+   helper so that both scalar and distribution-dict formats are handled
+   transparently.
+
+No changes are needed in `easyvvuq_openmc.py` — the auto-discovery functions
+(`discover_uncertain_parameters()`, `define_model_parameters()`,
+`define_parameter_distributions()`, and `prepare_uq_campaign()`) will
+automatically pick up the new parameter from the config structure.
+
+If a parameter has a `mean` key but no `pdf`, a warning is emitted and a
+Uniform distribution with CoV = 0.05 is applied by default.
+
+### Logging
+
+All console output is simultaneously saved to a timestamped log file
+(`openmc_uq_campaign_<timestamp>.log`).  Final UQ & SA results (descriptive
+statistics and Sobol sensitivity indices for each QoI) are printed in the
+console and recorded in the log.
 
