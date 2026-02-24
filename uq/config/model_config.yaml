@@ -15,7 +15,7 @@ geometry:
   cu_thickness:       0.3
   water_thickness:    0.6
   vacuum_thickness_1: 1.5
-  graphite_thickness:             # cm – graphite shielding layer thickness (uncertain)
+  graphite_thickness: #0.7             # cm – graphite shielding layer thickness (uncertain)
     mean: 0.7
     relative_stdev: 0.05
     pdf: normal
@@ -35,10 +35,10 @@ geometry:
     mean: 0.10                  # cm – nominal pebble radius
     relative_stdev: 0.05
     pdf: normal
-  packing_fraction:
-    mean: 0.30                  # nominal random packing fraction
-    relative_stdev: 0.05
-    pdf: uniform
+  packing_fraction: 0.30                    # nominal random packing fraction
+    # mean: 0.30                  # nominal random packing fraction
+    # relative_stdev: 0.05
+    # pdf: uniform
 
 # ── Materials ─────────────────────────────────────────────────────────────────
 materials:
@@ -48,10 +48,10 @@ materials:
       mean: 3.43
       relative_stdev: 0.02
       pdf: normal
-    li6_enrichment:             # at% Li-6 in lithium
-      mean: 7.5                 # natural abundance
-      relative_stdev: 0.05
-      pdf: normal
+    li6_enrichment: 7.5           # at% Li-6 in lithium
+      # mean: 7.5                 # natural abundance
+      # relative_stdev: 0.05
+      # pdf: normal
 
 # ── Simulation settings ───────────────────────────────────────────────────────
 simulation:

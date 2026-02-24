@@ -86,7 +86,7 @@ def define_model_parameters():
         # "li6_enrichment":     {"type": "float", "default": 7.5},
         "pebble_radius":      {"type": "float", "default": 0.1},
         # "packing_fraction":   {"type": "float", "default": 0.3},
-        # "graphite_thickness": {"type": "float", "default": 0.7},
+        "graphite_thickness": {"type": "float", "default": 0.7},
     }
 
     # QoI column names must match the CSV header written by openmc_model_run.py
@@ -125,7 +125,7 @@ def define_parameter_distributions(config, cov_override=None, dist_override=None
         # "li6_enrichment":     _v(_v(mat, 'li_ceramic'), 'li6_enrichment'),
         "pebble_radius":      _v(geom, 'pebble_radius'),
         # "packing_fraction":   _v(geom, 'packing_fraction'),
-        # "graphite_thickness": _v(geom, 'graphite_thickness'),
+        "graphite_thickness": _v(geom, 'graphite_thickness'),
     }
 
     _dist_map = {
@@ -183,17 +183,17 @@ def prepare_uq_campaign(config, config_file, fixed_params=None, uq_params=None):
         target_filename="config.yaml",
         parameter_map={
             "li_ceramic_density": "materials.li_ceramic.density.mean",
-            # "li6_enrichment":     "materials.li_ceramic.li6_enrichment.mean",
+            "li6_enrichment":     "materials.li_ceramic.li6_enrichment.mean",
             "pebble_radius":      "geometry.pebble_radius.mean",
-            # "packing_fraction":   "geometry.packing_fraction.mean",
-            # "graphite_thickness": "geometry.graphite_thickness.mean",
+            "packing_fraction":   "geometry.packing_fraction.mean",
+            "graphite_thickness": "geometry.graphite_thickness.mean",
         },
         type_conversions={
             "li_ceramic_density": float,
-            # "li6_enrichment":     float,
+            "li6_enrichment":     float,
             "pebble_radius":      float,
-            # "packing_fraction":   float,
-            # "graphite_thickness": float,
+            "packing_fraction":   float,
+            "graphite_thickness": float,
         },
         fixed_parameters=fixed_params or {},
     )
