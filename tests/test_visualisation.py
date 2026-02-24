@@ -112,6 +112,19 @@ class TestPlotQoiStatistics:
         path = plot_qoi_statistics(mock_results, QOIS, tmp_dir)
         assert os.path.getsize(path) > 0
 
+    def test_uses_describe_with_stat_arg(self, tmp_dir):
+        """Ensure describe() is called with the stat argument (not dict-indexing)."""
+
+        class _StrictDescribe(_MockResults):
+            def describe(self, qoi, stat=None):
+                if stat is None:
+                    raise KeyError("describe() must be called with a stat argument")
+                return super().describe(qoi, stat)
+
+        res = _StrictDescribe(QOIS, PARAMS)
+        path = plot_qoi_statistics(res, QOIS, tmp_dir)
+        assert os.path.isfile(path)
+
 
 class TestPlotSobolIndices:
     def test_creates_one_file_per_qoi(self, mock_results, distributions, tmp_dir):
