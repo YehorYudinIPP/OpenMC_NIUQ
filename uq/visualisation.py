@@ -79,12 +79,18 @@ def plot_qoi_statistics(results, qois, output_dir):
     p10s, p90s = [], []
     labels = []
 
+    print("\n >> Plotting QoI statistics for:")
+    print("    " + "\n    ".join(qois))
+
     for qoi in qois:
         desc = results.describe(qoi)
-        mean_val = float(np.squeeze(desc["mean"]))
-        std_val = float(np.squeeze(desc["std"]))
-        p10_val = float(np.squeeze(desc["10%"]))
-        p90_val = float(np.squeeze(desc["90%"]))
+
+        print(f"desc: {desc}")
+
+        mean_val = float(np.squeeze(results.describe(qoi, "mean")))
+        std_val = float(np.squeeze(results.describe(qoi, "std")))
+        p10_val = float(np.squeeze(results.describe(qoi, "10%")))
+        p90_val = float(np.squeeze(results.describe(qoi, "90%")))
 
         means.append(mean_val)
         stds.append(std_val)
