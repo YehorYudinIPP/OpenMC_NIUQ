@@ -32,7 +32,14 @@ if _here not in sys.path:
 from visualisation import visualise_results
 
 # ── Default QoI and parameter names (same as easyvvuq_openmc.py) ─────────────
-_DEFAULT_QOIS = ["tritium_production_rate", "total_neutron_flux"]
+_DEFAULT_QOIS = [
+    "tritium_production_rate",
+    "total_neutron_flux",
+    "tbm_incident_flux",
+    "tbm_inner_flux",
+    "tbm_heating",
+    "tbm_neutron_leakage",
+]
 _DEFAULT_PARAM_NAMES = [
     "li_ceramic_density",
     "li6_enrichment",
@@ -60,8 +67,13 @@ def _distributions_from_config(config):
         return define_parameter_distributions(config)
     except Exception:
         # Fall back: extract parameter names from the config structure
-        param_names = list(_extract_param_names(config))
-        return {name: None for name in param_names}
+        try:
+            from easyvvuq_openmc import discover_uncertain_parameters
+            specs = discover_uncertain_parameters(config)
+            return {s["name"]: None for s in specs}
+        except Exception:
+            param_names = list(_extract_param_names(config))
+            return {name: None for name in param_names}
 
 
 def _extract_param_names(config):

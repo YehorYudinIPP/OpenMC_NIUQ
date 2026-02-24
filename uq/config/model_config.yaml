@@ -1,6 +1,20 @@
 # OpenMC TBM (Test Blanket Module) Pebble-Bed Model Configuration
+#
 # Parameters with 'mean', 'relative_stdev', and 'pdf' fields are uncertain
 # inputs for the EasyVVUQ campaign.  Plain numeric values are fixed.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# HOW TO ADD A NEW UNCERTAIN PARAMETER
+# ═══════════════════════════════════════════════════════════════════════════
+# 1. Add the parameter below with 'mean', 'relative_stdev', and 'pdf' keys.
+#    If only a scalar value is provided for a parameter that should be
+#    uncertain, the system will automatically apply a Uniform distribution
+#    with CoV = 0.05 and print a warning.
+# 2. In openmc_model_run.py, read the parameter using _get_mean() so that
+#    both scalar and distribution-dict formats are supported.
+# 3. No changes are needed in easyvvuq_openmc.py — uncertain parameters
+#    are auto-discovered from this config file.
+# ═══════════════════════════════════════════════════════════════════════════
 
 # ── Geometry ──────────────────────────────────────────────────────────────────
 geometry:
@@ -67,4 +81,8 @@ output:
   qoi:
     - tritium_production_rate   # T nuclei produced per source neutron (TBR)
     - total_neutron_flux        # total neutron flux intensity (n/cm²/s per source neutron)
+    - tbm_incident_flux         # neutron current incident on TBM casing surfaces
+    - tbm_inner_flux            # neutron flux inside the TBM (Li2TiO3 ceramic)
+    - tbm_heating               # nuclear heating in TBM ceramic (eV/source neutron)
+    - tbm_neutron_leakage       # neutron leakage current from TBM casing surfaces
 
