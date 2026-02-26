@@ -23,6 +23,7 @@ import matplotlib
 matplotlib.use("Agg")  # non-interactive backend for CI / headless environments
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.stats import gaussian_kde
 
 
 # ── Human-readable labels ────────────────────────────────────────────────────
@@ -265,6 +266,310 @@ def plot_qoi_distributions(results, qois, output_dir):
 
 
 # ---------------------------------------------------------------------------
+# Second-order Sobol indices heatmap
+# ---------------------------------------------------------------------------
+
+def plot_sobol_second_order_heatmap(results, qois, distributions, output_dir):
+    """
+    Heatmap of second-order Sobol indices for each QoI.
+
+    Parameters
+    ----------
+    results : easyvvuq analysis results
+        Object returned by ``campaign.get_last_analysis()``.
+    qois : list[str]
+        QoI column names.
+    distributions : dict
+        Mapping of parameter name → chaospy distribution (used for ordering).
+    output_dir : str
+        Directory where figures are saved.
+
+    Returns
+    -------
+    list[str]
+        Paths to the saved figures (one per QoI), or empty list if
+        second-order indices are unavailable.
+    """
+    param_names = list(distributions.keys())
+    param_labels = [_label_for_param(p) for p in param_names]
+    n = len(param_names)
+
+    saved = []
+    for qoi in qois:
+        try:
+            sobols_second = results.sobols_second(qoi)
+        except (AttributeError, RuntimeError):
+            print("  ⓘ Second-order Sobol indices unavailable – "
+                  "skipping heatmap.")
+            return saved
+
+        matrix = np.zeros((n, n))
+        for i, pi in enumerate(param_names):
+            row = sobols_second.get(pi, {})
+            for j, pj in enumerate(param_names):
+                if i != j:
+                    val = row.get(pj, [0.0])
+                    matrix[i, j] = float(np.squeeze(val))
+
+        fig, ax = plt.subplots(figsize=(max(6, 1.2 * n), max(5, 1.0 * n)))
+        im = ax.imshow(matrix, cmap="YlOrRd", aspect="auto")
+        ax.set_xticks(range(n))
+        ax.set_yticks(range(n))
+        ax.set_xticklabels(param_labels, fontsize=9, rotation=35, ha="right")
+        ax.set_yticklabels(param_labels, fontsize=9)
+
+        for i in range(n):
+            for j in range(n):
+                ax.text(j, i, f"{matrix[i, j]:.3f}",
+                        ha="center", va="center", fontsize=8,
+                        color="white" if matrix[i, j] > matrix.max() * 0.6
+                        else "black")
+
+        ax.set_title(
+            f"Second-Order Sobol Indices – {_label_for_qoi(qoi)}", fontsize=13)
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        fig.tight_layout()
+
+        filename = f"sobol_second_order_{qoi}.png"
+        filepath = os.path.join(output_dir, filename)
+        fig.savefig(filepath, dpi=150)
+        plt.close(fig)
+        saved.append(filepath)
+        print(f"  ✓ Second-order Sobol heatmap saved: {filepath}")
+
+    return saved
+
+
+# ---------------------------------------------------------------------------
+# First-order Sobol pie chart
+# ---------------------------------------------------------------------------
+
+def plot_sobol_first_order_pie(results, qois, distributions, output_dir):
+    """
+    Pie chart of first-order Sobol indices for each QoI, with a segment
+    representing higher-order interactions (1 − Σ S₁).
+
+    Parameters
+    ----------
+    results : easyvvuq analysis results
+        Object returned by ``campaign.get_last_analysis()``.
+    qois : list[str]
+        QoI column names.
+    distributions : dict
+        Mapping of parameter name → chaospy distribution.
+    output_dir : str
+        Directory where figures are saved.
+
+    Returns
+    -------
+    list[str]
+        Paths to the saved figures (one per QoI).
+    """
+    param_names = list(distributions.keys())
+    param_labels = [_label_for_param(p) for p in param_names]
+
+    saved = []
+    for qoi in qois:
+        sobols_first = results.sobols_first(qoi)
+        s1_vals = []
+        for p in param_names:
+            s1 = sobols_first.get(p, [0.0])
+            s1_vals.append(max(0.0, float(np.squeeze(s1))))
+
+        total_first = sum(s1_vals)
+        higher_order = max(0.0, 1.0 - total_first)
+
+        sizes = s1_vals + [higher_order]
+        labels = param_labels + ["Higher-Order"]
+        colors = plt.cm.Set2(np.linspace(0, 1, len(labels)))
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        wedges, texts, autotexts = ax.pie(
+            sizes, labels=labels, autopct="%1.1f%%",
+            colors=colors, startangle=140,
+            pctdistance=0.85, textprops={"fontsize": 9})
+        for at in autotexts:
+            at.set_fontsize(8)
+        ax.set_title(
+            f"First-Order Sobol Indices – {_label_for_qoi(qoi)}", fontsize=13)
+        fig.tight_layout()
+
+        filename = f"sobol_pie_{qoi}.png"
+        filepath = os.path.join(output_dir, filename)
+        fig.savefig(filepath, dpi=150)
+        plt.close(fig)
+        saved.append(filepath)
+        print(f"  ✓ Sobol pie chart saved: {filepath}")
+
+    return saved
+
+
+# ---------------------------------------------------------------------------
+# QoI statistics table
+# ---------------------------------------------------------------------------
+
+def plot_qoi_statistics_table(results, qois, output_dir):
+    """
+    Render a table with Mean and Standard Deviation for each QoI.
+
+    Parameters
+    ----------
+    results : easyvvuq analysis results
+        Object returned by ``campaign.get_last_analysis()``.
+    qois : list[str]
+        QoI column names.
+    output_dir : str
+        Directory where the figure is saved.
+
+    Returns
+    -------
+    str
+        Path to the saved figure.
+    """
+    rows = []
+    for qoi in qois:
+        mean_val = float(np.squeeze(results.describe(qoi, "mean")))
+        std_val = float(np.squeeze(results.describe(qoi, "std")))
+        rows.append([_label_for_qoi(qoi), f"{mean_val:.4e}", f"{std_val:.4e}"])
+
+    fig, ax = plt.subplots(
+        figsize=(max(8, 2.5 * len(qois)), 1.0 + 0.5 * len(qois)))
+    ax.axis("off")
+    table = ax.table(
+        cellText=rows,
+        colLabels=["Quantity of Interest", "Mean", "Std Dev"],
+        loc="center",
+        cellLoc="center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+    table.scale(1, 1.6)
+
+    # Style header row
+    for j in range(3):
+        table[0, j].set_facecolor(_PRIMARY_COLOR)
+        table[0, j].set_text_props(color="white", fontweight="bold")
+
+    ax.set_title("QoI Summary Statistics", fontsize=14, pad=20)
+    fig.tight_layout()
+
+    filepath = os.path.join(output_dir, "qoi_statistics_table.png")
+    fig.savefig(filepath, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  ✓ QoI statistics table saved: {filepath}")
+    return filepath
+
+
+# ---------------------------------------------------------------------------
+# Relative standard deviation bar plot (log-scale)
+# ---------------------------------------------------------------------------
+
+def plot_relative_std(results, qois, output_dir):
+    """
+    Bar plot of relative standard deviation (CoV = std / |mean|) for each
+    QoI, displayed on a logarithmic scale.
+
+    Parameters
+    ----------
+    results : easyvvuq analysis results
+        Object returned by ``campaign.get_last_analysis()``.
+    qois : list[str]
+        QoI column names.
+    output_dir : str
+        Directory where the figure is saved.
+
+    Returns
+    -------
+    str
+        Path to the saved figure.
+    """
+    labels, rel_stds = [], []
+    for qoi in qois:
+        mean_val = float(np.squeeze(results.describe(qoi, "mean")))
+        std_val = float(np.squeeze(results.describe(qoi, "std")))
+        if mean_val != 0:
+            rel_stds.append(abs(std_val / mean_val))
+        else:
+            rel_stds.append(0.0)
+        labels.append(_label_for_qoi(qoi))
+
+    x = np.arange(len(qois))
+    fig, ax = plt.subplots(figsize=(max(8, 2 * len(qois)), 5))
+    ax.bar(x, rel_stds, color=_PRIMARY_COLOR, edgecolor="black", alpha=0.85)
+    ax.set_yscale("log")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=10, rotation=25, ha="right")
+    ax.set_ylabel("Relative Std Dev (CoV)", fontsize=12)
+    ax.set_title("Relative Standard Deviation of QoIs", fontsize=14)
+    ax.grid(axis="y", linestyle="--", alpha=0.5)
+    fig.tight_layout()
+
+    filepath = os.path.join(output_dir, "qoi_relative_std.png")
+    fig.savefig(filepath, dpi=150)
+    plt.close(fig)
+    print(f"  ✓ Relative std dev plot saved: {filepath}")
+    return filepath
+
+
+# ---------------------------------------------------------------------------
+# Input uncertainty PDFs with KDE fit
+# ---------------------------------------------------------------------------
+
+def plot_input_uncertainty_pdfs(distributions, output_dir, n_samples=10000):
+    """
+    Plot the probability density function of each uncertain input
+    parameter by sampling from its distribution and fitting a KDE.
+
+    Parameters
+    ----------
+    distributions : dict
+        Mapping of parameter name → chaospy distribution.
+        If a value is ``None`` the parameter is skipped.
+    output_dir : str
+        Directory where the figure is saved.
+    n_samples : int
+        Number of samples drawn from each distribution for the KDE.
+
+    Returns
+    -------
+    str or None
+        Path to the saved figure, or *None* if no plottable distributions
+        are available.
+    """
+    plottable = {k: v for k, v in distributions.items() if v is not None}
+    if not plottable:
+        print("  ⓘ No distribution objects available – skipping input PDF plot.")
+        return None
+
+    n = len(plottable)
+    fig, axes = plt.subplots(1, n, figsize=(5 * n, 4))
+    if n == 1:
+        axes = [axes]
+
+    for ax, (name, dist) in zip(axes, plottable.items()):
+        samples = np.squeeze(np.array(dist.sample(n_samples)))
+        kde = gaussian_kde(samples)
+        x_grid = np.linspace(samples.min(), samples.max(), 300)
+
+        ax.hist(samples, bins=60, density=True, color=_PRIMARY_COLOR,
+                edgecolor="black", alpha=0.4, label="Histogram")
+        ax.plot(x_grid, kde(x_grid), color=_SECONDARY_COLOR, linewidth=2,
+                label="KDE fit")
+        ax.set_xlabel(_label_for_param(name), fontsize=11)
+        ax.set_ylabel("Density", fontsize=11)
+        ax.set_title(f"Input PDF – {_label_for_param(name)}", fontsize=12)
+        ax.legend(fontsize=9)
+        ax.grid(axis="y", linestyle="--", alpha=0.5)
+
+    fig.tight_layout()
+    filepath = os.path.join(output_dir, "input_uncertainty_pdfs.png")
+    fig.savefig(filepath, dpi=150)
+    plt.close(fig)
+    print(f"  ✓ Input uncertainty PDF plot saved: {filepath}")
+    return filepath
+
+
+# ---------------------------------------------------------------------------
 # Top-level convenience function
 # ---------------------------------------------------------------------------
 
@@ -314,6 +619,27 @@ def visualise_results(results, qois, distributions, output_dir=None,
     dist_path = plot_qoi_distributions(results, qois, output_dir)
     if dist_path is not None:
         saved_files.append(dist_path)
+
+    # 4. Second-order Sobol indices heatmap
+    saved_files.extend(
+        plot_sobol_second_order_heatmap(results, qois, distributions,
+                                       output_dir))
+
+    # 5. First-order Sobol pie charts
+    saved_files.extend(
+        plot_sobol_first_order_pie(results, qois, distributions, output_dir))
+
+    # 6. QoI statistics table (Mean & Std)
+    saved_files.append(
+        plot_qoi_statistics_table(results, qois, output_dir))
+
+    # 7. Relative standard deviation bar plot (log-scale)
+    saved_files.append(plot_relative_std(results, qois, output_dir))
+
+    # 8. Input uncertainty PDFs with KDE fit
+    pdf_path = plot_input_uncertainty_pdfs(distributions, output_dir)
+    if pdf_path is not None:
+        saved_files.append(pdf_path)
 
     print(f" >> Visualisation complete. {len(saved_files)} plot(s) generated.")
     return saved_files
