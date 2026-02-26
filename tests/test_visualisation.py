@@ -21,9 +21,14 @@ if _uq_dir not in sys.path:
     sys.path.insert(0, os.path.abspath(_uq_dir))
 
 from visualisation import (
+    plot_input_uncertainty_pdfs,
     plot_qoi_distributions,
     plot_qoi_statistics,
+    plot_qoi_statistics_table,
+    plot_relative_std,
+    plot_sobol_first_order_pie,
     plot_sobol_indices,
+    plot_sobol_second_order_heatmap,
     visualise_results,
 )
 from visualise_uq_results import main as visualise_main
@@ -64,6 +69,17 @@ class _MockResults:
         sobols = self.sobols_first(qoi)
         # Total ≥ first-order
         return {p: v + np.array([0.02]) for p, v in sobols.items()}
+
+    def sobols_second(self, qoi=None):
+        n = len(self._param_names)
+        result = {}
+        for i, pi in enumerate(self._param_names):
+            row = {}
+            for j, pj in enumerate(self._param_names):
+                if i != j:
+                    row[pj] = np.array([np.random.uniform(0.0, 0.05)])
+            result[pi] = row
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +173,78 @@ class TestPlotQoiDistributions:
         res = _MockResults(QOIS, PARAMS)
         res.raw_data = None
         assert plot_qoi_distributions(res, QOIS, tmp_dir) is None
+
+
+class TestPlotSobolSecondOrderHeatmap:
+    def test_creates_one_file_per_qoi(self, mock_results, distributions, tmp_dir):
+        paths = plot_sobol_second_order_heatmap(
+            mock_results, QOIS, distributions, tmp_dir)
+        assert len(paths) == len(QOIS)
+        for p in paths:
+            assert os.path.isfile(p)
+            assert "sobol_second_order_" in p
+
+    def test_returns_empty_when_unavailable(self, distributions, tmp_dir):
+        class _NoSecond(_MockResults):
+            def sobols_second(self, qoi=None):
+                raise RuntimeError("Not available")
+
+        res = _NoSecond(QOIS, PARAMS)
+        paths = plot_sobol_second_order_heatmap(
+            res, QOIS, distributions, tmp_dir)
+        assert paths == []
+
+
+class TestPlotSobolFirstOrderPie:
+    def test_creates_one_file_per_qoi(self, mock_results, distributions, tmp_dir):
+        paths = plot_sobol_first_order_pie(
+            mock_results, QOIS, distributions, tmp_dir)
+        assert len(paths) == len(QOIS)
+        for p in paths:
+            assert os.path.isfile(p)
+            assert "sobol_pie_" in p
+
+
+class TestPlotQoiStatisticsTable:
+    def test_creates_file(self, mock_results, tmp_dir):
+        path = plot_qoi_statistics_table(mock_results, QOIS, tmp_dir)
+        assert os.path.isfile(path)
+        assert "qoi_statistics_table" in path
+
+    def test_file_nonempty(self, mock_results, tmp_dir):
+        path = plot_qoi_statistics_table(mock_results, QOIS, tmp_dir)
+        assert os.path.getsize(path) > 0
+
+
+class TestPlotRelativeStd:
+    def test_creates_file(self, mock_results, tmp_dir):
+        path = plot_relative_std(mock_results, QOIS, tmp_dir)
+        assert os.path.isfile(path)
+        assert "qoi_relative_std" in path
+
+    def test_file_nonempty(self, mock_results, tmp_dir):
+        path = plot_relative_std(mock_results, QOIS, tmp_dir)
+        assert os.path.getsize(path) > 0
+
+
+class TestPlotInputUncertaintyPdfs:
+    def test_returns_none_when_no_distributions(self, tmp_dir):
+        dists = {p: None for p in PARAMS}
+        result = plot_input_uncertainty_pdfs(dists, tmp_dir)
+        assert result is None
+
+    def test_creates_file_with_mock_distributions(self, tmp_dir):
+        """Use a simple mock distribution that supports .sample()."""
+
+        class _MockDist:
+            def sample(self, n):
+                return np.random.normal(1.0, 0.1, n)
+
+        dists = {PARAMS[0]: _MockDist(), PARAMS[1]: _MockDist()}
+        path = plot_input_uncertainty_pdfs(dists, tmp_dir)
+        assert path is not None
+        assert os.path.isfile(path)
+        assert "input_uncertainty_pdfs" in path
 
 
 class TestVisualiseResults:
