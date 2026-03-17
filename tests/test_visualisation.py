@@ -21,6 +21,8 @@ if _uq_dir not in sys.path:
     sys.path.insert(0, os.path.abspath(_uq_dir))
 
 from visualisation import (
+    _QOI_UNITS,
+    _unit_for_qoi,
     plot_input_uncertainty_pdfs,
     plot_qoi_distributions,
     plot_qoi_statistics,
@@ -118,6 +120,26 @@ def tmp_dir():
 # Tests
 # ---------------------------------------------------------------------------
 
+class TestQoiUnits:
+    """Verify that the QoI units dict and helper are available."""
+
+    def test_all_qois_have_units(self):
+        for qoi in QOIS:
+            unit = _unit_for_qoi(qoi)
+            assert isinstance(unit, str) and len(unit) > 0, (
+                f"QoI '{qoi}' should have a non-empty unit string")
+
+    def test_unknown_qoi_returns_empty(self):
+        assert _unit_for_qoi("unknown_qoi") == ""
+
+    def test_units_dict_has_all_known_qois(self):
+        known = ["tritium_production_rate", "total_neutron_flux",
+                 "tbm_incident_flux", "tbm_inner_flux",
+                 "tbm_heating", "tbm_neutron_leakage"]
+        for qoi in known:
+            assert qoi in _QOI_UNITS
+
+
 class TestPlotQoiStatistics:
     def test_creates_file(self, mock_results, tmp_dir):
         path = plot_qoi_statistics(mock_results, QOIS, tmp_dir)
@@ -193,6 +215,34 @@ class TestPlotSobolSecondOrderHeatmap:
         paths = plot_sobol_second_order_heatmap(
             res, QOIS, distributions, tmp_dir)
         assert paths == []
+
+    def test_diagonal_contains_first_order_indices(self, distributions, tmp_dir):
+        """The main diagonal of the heatmap matrix must hold S1 values."""
+        s1_called = []
+
+        class _FixedSobols(_MockResults):
+            def sobols_first(self, qoi=None):
+                s1_called.append(qoi)
+                # Deterministic first-order values
+                return {p: np.array([0.1 * (i + 1)])
+                        for i, p in enumerate(self._param_names)}
+
+            def sobols_second(self, qoi=None):
+                result = {}
+                for pi in self._param_names:
+                    row = {}
+                    for pj in self._param_names:
+                        if pi != pj:
+                            row[pj] = np.array([0.001])
+                    result[pi] = row
+                return result
+
+        res = _FixedSobols(QOIS, PARAMS)
+        paths = plot_sobol_second_order_heatmap(
+            res, QOIS, distributions, tmp_dir)
+        assert len(paths) == len(QOIS)
+        # sobols_first must have been called once per QoI
+        assert len(s1_called) == len(QOIS)
 
 
 class TestPlotSobolFirstOrderPie:
