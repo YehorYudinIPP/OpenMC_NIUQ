@@ -36,6 +36,15 @@ _QOI_LABELS = {
     "tbm_neutron_leakage": "TBM Neutron Leakage",
 }
 
+_QOI_UNITS = {
+    "tritium_production_rate": "T/source neutron",
+    "total_neutron_flux": "n/cm²/s per source",
+    "tbm_incident_flux": "n/cm²/s",
+    "tbm_inner_flux": "n/cm²/s",
+    "tbm_heating": "eV/source neutron",
+    "tbm_neutron_leakage": "n/cm²/s",
+}
+
 _PARAM_LABELS = {
     "li_ceramic_density": r"Li$_2$TiO$_3$ Density",
     "li6_enrichment": r"$^{6}$Li Enrichment",
@@ -51,6 +60,11 @@ _SECONDARY_COLOR = "#DD8452"
 def _label_for_qoi(qoi):
     """Return a human-readable label for a QoI name."""
     return _QOI_LABELS.get(qoi, qoi)
+
+
+def _unit_for_qoi(qoi):
+    """Return the physical unit string for a QoI name."""
+    return _QOI_UNITS.get(qoi, "")
 
 
 def _label_for_param(param):
@@ -117,7 +131,8 @@ def plot_qoi_statistics(results, qois, output_dir):
 
         ax.set_xticks([0])
         ax.set_xticklabels([labels[i]], fontsize=11)
-        ax.set_ylabel("Value", fontsize=12)
+        unit = _unit_for_qoi(qois[i])
+        ax.set_ylabel(f"[{unit}]" if unit else "Value", fontsize=12)
         ax.set_title(labels[i], fontsize=14)
         ax.legend(fontsize=10)
         ax.grid(axis="y", linestyle="--", alpha=0.5)
@@ -248,7 +263,9 @@ def plot_qoi_distributions(results, qois, output_dir):
             samples = np.squeeze(np.array(raw[qoi]))
             ax.hist(samples, bins="auto", color=_PRIMARY_COLOR, edgecolor="black",
                     alpha=0.75)
-            ax.set_xlabel(_label_for_qoi(qoi), fontsize=11)
+            unit = _unit_for_qoi(qoi)
+            xlabel = f"{_label_for_qoi(qoi)} [{unit}]" if unit else _label_for_qoi(qoi)
+            ax.set_xlabel(xlabel, fontsize=11)
             ax.set_ylabel("Frequency", fontsize=11)
             ax.set_title(f"Distribution of {_label_for_qoi(qoi)}", fontsize=12)
             ax.grid(axis="y", linestyle="--", alpha=0.5)
@@ -303,8 +320,18 @@ def plot_sobol_second_order_heatmap(results, qois, distributions, output_dir):
                   "skipping heatmap.")
             return saved
 
+        # First-order indices for the main diagonal
+        try:
+            sobols_first = results.sobols_first(qoi)
+        except (AttributeError, RuntimeError):
+            sobols_first = {}
+
         matrix = np.zeros((n, n))
         for i, pi in enumerate(param_names):
+            # Diagonal: first-order Sobol index
+            s1 = sobols_first.get(pi, [0.0])
+            matrix[i, i] = float(np.squeeze(s1))
+            # Off-diagonal: second-order Sobol indices
             row = sobols_second.get(pi, {})
             for j, pj in enumerate(param_names):
                 if i != j:
@@ -385,11 +412,13 @@ def plot_sobol_first_order_pie(results, qois, distributions, output_dir):
 
         fig, ax = plt.subplots(figsize=(8, 6))
         wedges, texts, autotexts = ax.pie(
-            sizes, labels=labels, autopct="%1.1f%%",
+            sizes, autopct="%1.1f%%",
             colors=colors, startangle=140,
             pctdistance=0.85, textprops={"fontsize": 9})
         for at in autotexts:
             at.set_fontsize(8)
+        ax.legend(wedges, labels, title="Parameters", loc="center left",
+                  bbox_to_anchor=(1.0, 0.5), fontsize=9)
         ax.set_title(
             f"First-Order Sobol Indices – {_label_for_qoi(qoi)}", fontsize=13)
         fig.tight_layout()
@@ -430,14 +459,15 @@ def plot_qoi_statistics_table(results, qois, output_dir):
     for qoi in qois:
         mean_val = float(np.squeeze(results.describe(qoi, "mean")))
         std_val = float(np.squeeze(results.describe(qoi, "std")))
-        rows.append([_label_for_qoi(qoi), f"{mean_val:.4e}", f"{std_val:.4e}"])
+        unit = _unit_for_qoi(qoi)
+        rows.append([_label_for_qoi(qoi), unit, f"{mean_val:.4e}", f"{std_val:.4e}"])
 
     fig, ax = plt.subplots(
-        figsize=(max(8, 2.5 * len(qois)), 1.0 + 0.5 * len(qois)))
+        figsize=(max(10, 3.0 * len(qois)), 1.0 + 0.5 * len(qois)))
     ax.axis("off")
     table = ax.table(
         cellText=rows,
-        colLabels=["Quantity of Interest", "Mean", "Std Dev"],
+        colLabels=["Quantity of Interest", "Units", "Mean", "Std Dev"],
         loc="center",
         cellLoc="center",
     )
@@ -446,7 +476,7 @@ def plot_qoi_statistics_table(results, qois, output_dir):
     table.scale(1, 1.6)
 
     # Style header row
-    for j in range(3):
+    for j in range(4):
         table[0, j].set_facecolor(_PRIMARY_COLOR)
         table[0, j].set_text_props(color="white", fontweight="bold")
 
