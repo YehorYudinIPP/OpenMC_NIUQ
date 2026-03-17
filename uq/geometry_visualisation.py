@@ -34,11 +34,17 @@ _MAT_COLORS = {
     "Vacuum":   "#F0F0F0",  # very light grey
     "Graphite": "#555555",  # dark grey
     "Ti":       "#A0A0C0",  # steel blue-grey
-    "Air":      "#E8F8E8",  # very faint green
+    "Air":      "#E8F8E8",  # very light grey-green
     "Eurofer":  "#B0B0B0",  # medium grey
     "Li2TiO3":  "#E07050",  # red-orange (ceramic)
     "Room":     "#FAFAFA",  # near-white
 }
+
+# Visual constant for the target-layer stack-up plot (arbitrary half-width)
+_LAYER_PLOT_HALF_WIDTH = 10.0
+
+# Default neutron source energy (MeV) used in annotation
+_SOURCE_ENERGY_MEV = 14.1
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +479,7 @@ def plot_target_layers(config, output_dir):
                  fontweight="bold")
 
     layers = g["layers"]
-    bar_half_width = 10.0  # arbitrary visual half-width in y
+    bar_half_width = _LAYER_PLOT_HALF_WIDTH
 
     for z0, z1, name, thick in layers:
         color = _MAT_COLORS.get(name, "#CCCCCC")
@@ -515,7 +521,8 @@ def plot_target_layers(config, output_dir):
     # Neutron source indicator
     z_li_lo = g["z_li_lo"]
     z_li_hi = layers[0][1]
-    ax.annotate("14.1 MeV\nneutron source", xy=(-bar_half_width - 1, (z_li_lo + z_li_hi) / 2),
+    ax.annotate(f"{_SOURCE_ENERGY_MEV} MeV\nneutron source",
+                xy=(-bar_half_width - 1, (z_li_lo + z_li_hi) / 2),
                 xytext=(-bar_half_width - 6, (z_li_lo + z_li_hi) / 2 - 1),
                 fontsize=7, color="#CC0000",
                 arrowprops=dict(arrowstyle="->", color="#CC0000", lw=1.0),
