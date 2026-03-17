@@ -218,9 +218,11 @@ class TestPlotSobolSecondOrderHeatmap:
 
     def test_diagonal_contains_first_order_indices(self, distributions, tmp_dir):
         """The main diagonal of the heatmap matrix must hold S1 values."""
+        s1_called = []
 
         class _FixedSobols(_MockResults):
             def sobols_first(self, qoi=None):
+                s1_called.append(qoi)
                 # Deterministic first-order values
                 return {p: np.array([0.1 * (i + 1)])
                         for i, p in enumerate(self._param_names)}
@@ -236,11 +238,11 @@ class TestPlotSobolSecondOrderHeatmap:
                 return result
 
         res = _FixedSobols(QOIS, PARAMS)
-        # We only need the function to run without error; the real
-        # assertion is that sobols_first is called and placed on diagonal.
         paths = plot_sobol_second_order_heatmap(
             res, QOIS, distributions, tmp_dir)
         assert len(paths) == len(QOIS)
+        # sobols_first must have been called once per QoI
+        assert len(s1_called) == len(QOIS)
 
 
 class TestPlotSobolFirstOrderPie:
