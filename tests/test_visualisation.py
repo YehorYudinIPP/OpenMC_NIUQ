@@ -25,6 +25,8 @@ from visualisation import (
     _unit_for_qoi,
     plot_input_uncertainty_pdfs,
     plot_qoi_distributions,
+    plot_qoi_individual_runs,
+    plot_qoi_pdf_pce,
     plot_qoi_statistics,
     plot_qoi_statistics_table,
     plot_relative_std,
@@ -295,6 +297,40 @@ class TestPlotInputUncertaintyPdfs:
         assert path is not None
         assert os.path.isfile(path)
         assert "input_uncertainty_pdfs" in path
+
+
+class TestPlotQoiPdfPce:
+    def test_creates_file(self, mock_results, tmp_dir):
+        path = plot_qoi_pdf_pce(mock_results, QOIS, tmp_dir)
+        assert path is not None
+        assert os.path.isfile(path)
+        assert "qoi_pdf_pce" in path
+
+    def test_returns_none_when_no_raw_data(self, tmp_dir):
+        res = _MockResults(QOIS, PARAMS)
+        res.raw_data = None
+        assert plot_qoi_pdf_pce(res, QOIS, tmp_dir) is None
+
+    def test_file_nonempty(self, mock_results, tmp_dir):
+        path = plot_qoi_pdf_pce(mock_results, QOIS, tmp_dir)
+        assert os.path.getsize(path) > 0
+
+
+class TestPlotQoiIndividualRuns:
+    def test_creates_file(self, mock_results, tmp_dir):
+        path = plot_qoi_individual_runs(mock_results, QOIS, tmp_dir)
+        assert path is not None
+        assert os.path.isfile(path)
+        assert "qoi_individual_runs" in path
+
+    def test_returns_none_when_no_raw_data(self, tmp_dir):
+        res = _MockResults(QOIS, PARAMS)
+        res.raw_data = None
+        assert plot_qoi_individual_runs(res, QOIS, tmp_dir) is None
+
+    def test_file_nonempty(self, mock_results, tmp_dir):
+        path = plot_qoi_individual_runs(mock_results, QOIS, tmp_dir)
+        assert os.path.getsize(path) > 0
 
 
 class TestVisualiseResults:

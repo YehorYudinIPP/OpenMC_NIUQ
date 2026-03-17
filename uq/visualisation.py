@@ -463,7 +463,7 @@ def plot_qoi_statistics_table(results, qois, output_dir):
         rows.append([_label_for_qoi(qoi), unit, f"{mean_val:.4e}", f"{std_val:.4e}"])
 
     fig, ax = plt.subplots(
-        figsize=(max(10, 3.0 * len(qois)), 1.0 + 0.5 * len(qois)))
+        figsize=(max(8, 1.8 * len(qois)), 1.0 + 0.45 * len(qois)))
     ax.axis("off")
     table = ax.table(
         cellText=rows,
@@ -472,8 +472,9 @@ def plot_qoi_statistics_table(results, qois, output_dir):
         cellLoc="center",
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(11)
-    table.scale(1, 1.6)
+    table.set_fontsize(10)
+    table.auto_set_column_width(col=list(range(4)))
+    table.scale(1, 1.4)
 
     # Style header row
     for j in range(4):
@@ -578,13 +579,20 @@ def plot_input_uncertainty_pdfs(distributions, output_dir, n_samples=10000):
 
     for ax, (name, dist) in zip(axes, plottable.items()):
         samples = np.squeeze(np.array(dist.sample(n_samples)))
-        kde = gaussian_kde(samples)
         x_grid = np.linspace(samples.min(), samples.max(), 300)
 
-        ax.hist(samples, bins=60, density=True, color=_PRIMARY_COLOR,
-                edgecolor="black", alpha=0.4, label="Histogram")
-        ax.plot(x_grid, kde(x_grid), color=_SECONDARY_COLOR, linewidth=2,
-                label="KDE fit")
+        # Prefer analytical PDF when available; fall back to KDE
+        try:
+            y_vals = np.squeeze(np.array(dist.pdf(x_grid)))
+            label = "PDF"
+        except (AttributeError, NotImplementedError, TypeError):
+            kde = gaussian_kde(samples)
+            y_vals = kde(x_grid)
+            label = "KDE fit"
+
+        ax.plot(x_grid, y_vals, color=_PRIMARY_COLOR, linewidth=2,
+                label=label)
+        ax.fill_between(x_grid, y_vals, alpha=0.25, color=_PRIMARY_COLOR)
         ax.set_xlabel(_label_for_param(name), fontsize=11)
         ax.set_ylabel("Density", fontsize=11)
         ax.set_title(f"Input PDF – {_label_for_param(name)}", fontsize=12)
@@ -596,6 +604,145 @@ def plot_input_uncertainty_pdfs(distributions, output_dir, n_samples=10000):
     fig.savefig(filepath, dpi=150)
     plt.close(fig)
     print(f"  ✓ Input uncertainty PDF plot saved: {filepath}")
+    return filepath
+
+
+# ---------------------------------------------------------------------------
+# QoI PDF from PCE surrogate (KDE of raw samples)
+# ---------------------------------------------------------------------------
+
+def plot_qoi_pdf_pce(results, qois, output_dir):
+    """
+    Plot the estimated probability density function of each QoI derived
+    from the PCE surrogate model.
+
+    The PDF is obtained by fitting a Kernel Density Estimate (KDE) to the
+    raw QoI samples stored in the analysis results.
+
+    Parameters
+    ----------
+    results : easyvvuq analysis results
+        Object returned by ``campaign.get_last_analysis()``.
+    qois : list[str]
+        QoI column names.
+    output_dir : str
+        Directory where the figure is saved.
+
+    Returns
+    -------
+    str or None
+        Path to the saved figure, or *None* if raw data is unavailable.
+    """
+    raw = getattr(results, "raw_data", None)
+    if raw is None:
+        print("  ⓘ No raw sample data available – skipping QoI PDF plot.")
+        return None
+
+    n_qois = len(qois)
+    fig, axes = plt.subplots(1, n_qois, figsize=(6 * n_qois, 5))
+    if n_qois == 1:
+        axes = [axes]
+
+    for ax, qoi in zip(axes, qois):
+        try:
+            samples = np.squeeze(np.array(raw[qoi]))
+            if samples.ndim == 0 or len(samples) < 2:
+                raise ValueError("Not enough samples for KDE")
+            kde = gaussian_kde(samples)
+            x_grid = np.linspace(samples.min(), samples.max(), 300)
+            y_vals = kde(x_grid)
+
+            ax.plot(x_grid, y_vals, color=_PRIMARY_COLOR, linewidth=2,
+                    label="PCE PDF")
+            ax.fill_between(x_grid, y_vals, alpha=0.25,
+                            color=_PRIMARY_COLOR)
+            unit = _unit_for_qoi(qoi)
+            xlabel = (f"{_label_for_qoi(qoi)} [{unit}]" if unit
+                      else _label_for_qoi(qoi))
+            ax.set_xlabel(xlabel, fontsize=11)
+            ax.set_ylabel("Density", fontsize=11)
+            ax.set_title(f"QoI PDF – {_label_for_qoi(qoi)}", fontsize=12)
+            ax.legend(fontsize=9)
+            ax.grid(axis="y", linestyle="--", alpha=0.5)
+        except (KeyError, TypeError, ValueError) as exc:
+            print(f"  ⓘ QoI PDF skipped for '{qoi}': {exc}")
+            ax.text(0.5, 0.5, "No data", transform=ax.transAxes,
+                    ha="center", va="center", fontsize=14, color="grey")
+            ax.set_title(_label_for_qoi(qoi))
+
+    fig.tight_layout()
+    filepath = os.path.join(output_dir, "qoi_pdf_pce.png")
+    fig.savefig(filepath, dpi=150)
+    plt.close(fig)
+    print(f"  ✓ QoI PDF (PCE) plot saved: {filepath}")
+    return filepath
+
+
+# ---------------------------------------------------------------------------
+# QoI individual run values (strip / scatter plot)
+# ---------------------------------------------------------------------------
+
+def plot_qoi_individual_runs(results, qois, output_dir):
+    """
+    Scatter plot showing the value of each QoI for every individual run.
+
+    Parameters
+    ----------
+    results : easyvvuq analysis results
+        Object returned by ``campaign.get_last_analysis()``.
+    qois : list[str]
+        QoI column names.
+    output_dir : str
+        Directory where the figure is saved.
+
+    Returns
+    -------
+    str or None
+        Path to the saved figure, or *None* if raw data is unavailable.
+    """
+    raw = getattr(results, "raw_data", None)
+    if raw is None:
+        print("  ⓘ No raw sample data available – skipping individual "
+              "runs plot.")
+        return None
+
+    n_qois = len(qois)
+    fig, axes = plt.subplots(1, n_qois, figsize=(6 * n_qois, 5))
+    if n_qois == 1:
+        axes = [axes]
+
+    for ax, qoi in zip(axes, qois):
+        try:
+            samples = np.squeeze(np.array(raw[qoi]))
+            run_ids = np.arange(1, len(samples) + 1)
+
+            ax.scatter(run_ids, samples, s=20, color=_PRIMARY_COLOR,
+                       edgecolors="black", linewidths=0.4, alpha=0.85,
+                       label="Individual runs")
+
+            mean_val = float(np.squeeze(results.describe(qoi, "mean")))
+            ax.axhline(mean_val, color=_SECONDARY_COLOR, linewidth=1.5,
+                       linestyle="--", label=f"Mean = {mean_val:.4e}")
+
+            ax.set_xlabel("Run #", fontsize=11)
+            unit = _unit_for_qoi(qoi)
+            ylabel = f"{_label_for_qoi(qoi)} [{unit}]" if unit else _label_for_qoi(qoi)
+            ax.set_ylabel(ylabel, fontsize=11)
+            ax.set_title(f"Individual Runs – {_label_for_qoi(qoi)}",
+                         fontsize=12)
+            ax.legend(fontsize=9)
+            ax.grid(axis="y", linestyle="--", alpha=0.5)
+        except (KeyError, TypeError) as exc:
+            print(f"  ⓘ Individual runs skipped for '{qoi}': {exc}")
+            ax.text(0.5, 0.5, "No data", transform=ax.transAxes,
+                    ha="center", va="center", fontsize=14, color="grey")
+            ax.set_title(_label_for_qoi(qoi))
+
+    fig.tight_layout()
+    filepath = os.path.join(output_dir, "qoi_individual_runs.png")
+    fig.savefig(filepath, dpi=150)
+    plt.close(fig)
+    print(f"  ✓ QoI individual runs plot saved: {filepath}")
     return filepath
 
 
@@ -666,10 +813,20 @@ def visualise_results(results, qois, distributions, output_dir=None,
     # 7. Relative standard deviation bar plot (log-scale)
     saved_files.append(plot_relative_std(results, qois, output_dir))
 
-    # 8. Input uncertainty PDFs with KDE fit
+    # 8. Input uncertainty PDFs
     pdf_path = plot_input_uncertainty_pdfs(distributions, output_dir)
     if pdf_path is not None:
         saved_files.append(pdf_path)
+
+    # 9. QoI PDFs from PCE surrogate
+    qoi_pdf_path = plot_qoi_pdf_pce(results, qois, output_dir)
+    if qoi_pdf_path is not None:
+        saved_files.append(qoi_pdf_path)
+
+    # 10. Individual run values per QoI
+    runs_path = plot_qoi_individual_runs(results, qois, output_dir)
+    if runs_path is not None:
+        saved_files.append(runs_path)
 
     print(f" >> Visualisation complete. {len(saved_files)} plot(s) generated.")
     return saved_files
