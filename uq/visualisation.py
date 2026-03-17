@@ -585,7 +585,7 @@ def plot_input_uncertainty_pdfs(distributions, output_dir, n_samples=10000):
         try:
             y_vals = np.squeeze(np.array(dist.pdf(x_grid)))
             label = "PDF"
-        except Exception:
+        except (AttributeError, NotImplementedError, TypeError):
             kde = gaussian_kde(samples)
             y_vals = kde(x_grid)
             label = "KDE fit"
@@ -650,10 +650,11 @@ def plot_qoi_pdf_pce(results, qois, output_dir):
                 raise ValueError("Not enough samples for KDE")
             kde = gaussian_kde(samples)
             x_grid = np.linspace(samples.min(), samples.max(), 300)
+            y_vals = kde(x_grid)
 
-            ax.plot(x_grid, kde(x_grid), color=_PRIMARY_COLOR, linewidth=2,
+            ax.plot(x_grid, y_vals, color=_PRIMARY_COLOR, linewidth=2,
                     label="PCE PDF")
-            ax.fill_between(x_grid, kde(x_grid), alpha=0.25,
+            ax.fill_between(x_grid, y_vals, alpha=0.25,
                             color=_PRIMARY_COLOR)
             unit = _unit_for_qoi(qoi)
             xlabel = (f"{_label_for_qoi(qoi)} [{unit}]" if unit
@@ -663,7 +664,8 @@ def plot_qoi_pdf_pce(results, qois, output_dir):
             ax.set_title(f"QoI PDF – {_label_for_qoi(qoi)}", fontsize=12)
             ax.legend(fontsize=9)
             ax.grid(axis="y", linestyle="--", alpha=0.5)
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError) as exc:
+            print(f"  ⓘ QoI PDF skipped for '{qoi}': {exc}")
             ax.text(0.5, 0.5, "No data", transform=ax.transAxes,
                     ha="center", va="center", fontsize=14, color="grey")
             ax.set_title(_label_for_qoi(qoi))
@@ -730,7 +732,8 @@ def plot_qoi_individual_runs(results, qois, output_dir):
                          fontsize=12)
             ax.legend(fontsize=9)
             ax.grid(axis="y", linestyle="--", alpha=0.5)
-        except (KeyError, TypeError):
+        except (KeyError, TypeError) as exc:
+            print(f"  ⓘ Individual runs skipped for '{qoi}': {exc}")
             ax.text(0.5, 0.5, "No data", transform=ax.transAxes,
                     ha="center", va="center", fontsize=14, color="grey")
             ax.set_title(_label_for_qoi(qoi))
