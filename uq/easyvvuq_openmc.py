@@ -341,7 +341,8 @@ def prepare_uq_campaign(config, config_file, fixed_params=None, uq_params=None):
     logger.info("Decoder prepared for QoIs: %s", qois)
 
     # ── Execution command ─────────────────────────────────────────────────────
-    python_exe, script_path = validate_execution_setup()
+    exec_script = config.get('execution', {}).get('script', 'openmc_model_run.py')
+    python_exe, script_path = validate_execution_setup(runnable_script=exec_script)
     execute = ExecuteLocal(f"{python_exe} {script_path} --config config.yaml")
 
     # ── Actions ───────────────────────────────────────────────────────────────
