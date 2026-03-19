@@ -100,8 +100,8 @@ def build_openmc_model(config):
     packing_fraction = float(_get_mean(geom_cfg.get('packing_fraction', 0.3)))
 
     # Graphite liner on the inner back wall of the TBM (cm)
-    graphite_liner_thickness = float(
-        geom_cfg.get('graphite_liner_thickness', 0.5))
+    graphite_liner_thickness = float(_get_mean( 
+        geom_cfg.get('graphite_liner_thickness', 0.5)))
 
     # ── Material parameters ──────────────────────────────────────────────────
     li_ceramic_density = float(
