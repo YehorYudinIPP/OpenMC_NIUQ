@@ -75,25 +75,25 @@ def compute_geometry(config):
     geom = config.get("geometry", {})
 
     # Target layer thicknesses (cm)
-    li_t       = float(geom.get("li_thickness",       0.02))
-    cu_t       = float(geom.get("cu_thickness",       0.3))
-    water_t    = float(geom.get("water_thickness",    0.6))
-    vac1_t     = float(geom.get("vacuum_thickness_1", 1.5))
+    li_t       = float(_get_mean(geom.get("li_thickness",       0.02)))
+    cu_t       = float(_get_mean(geom.get("cu_thickness",       0.3)))
+    water_t    = float(_get_mean(geom.get("water_thickness",    0.6)))
+    vac1_t     = float(_get_mean(geom.get("vacuum_thickness_1", 1.5)))
     graphite_t = float(_get_mean(geom.get("graphite_thickness", 0.7)))
-    vac2_t     = float(geom.get("vacuum_thickness_2", 0.48))
-    ti_t       = float(geom.get("ti_thickness",       0.6))
-    air_gap    = float(geom.get("air_gap",            0.1))
-    wh_r       = float(geom.get("wh_r",               50.0))
+    vac2_t     = float(_get_mean(geom.get("vacuum_thickness_2", 0.48)))
+    ti_t       = float(_get_mean(geom.get("ti_thickness",       0.6)))
+    air_gap    = float(_get_mean(geom.get("air_gap",            0.1)))
+    wh_r       = float(_get_mean(geom.get("wh_r",               50.0)))
 
     # TBM
-    eurofer_t      = float(geom.get("eurofer_thickness", 0.5))
-    tbm_width      = float(geom.get("tbm_width",        7.0))
-    tbm_thickness  = float(geom.get("tbm_thickness",    2.0))
-    tbm_height     = float(geom.get("tbm_height",       3.0))
-    tbm_pos_y      = float(geom.get("tbm_position_y",   -42.0))
+    eurofer_t      = float(_get_mean(geom.get("eurofer_thickness", 0.5)))
+    tbm_width      = float(_get_mean(geom.get("tbm_width",        7.0)))
+    tbm_thickness  = float(_get_mean(geom.get("tbm_thickness",    2.0)))
+    tbm_height     = float(_get_mean(geom.get("tbm_height",       3.0)))
+    tbm_pos_y      = float(_get_mean(geom.get("tbm_position_y",   -42.0)))
 
     # Optional graphite liner
-    graphite_liner_t = float(geom.get("graphite_liner_thickness", 0.0))
+    graphite_liner_t = float(_get_mean(geom.get("graphite_liner_thickness", 0.0)))
 
     # Z-coordinates of target layers
     z_li_lo    = -li_t / 2
