@@ -114,7 +114,7 @@ def plot_qoi_statistics(results, qois, output_dir):
         labels.append(_label_for_qoi(qoi))
 
     n_qois = len(qois)
-    fig, axes = plt.subplots(1, n_qois, figsize=(max(6, 5 * n_qois), 5))
+    fig, axes = plt.subplots(1, n_qois, figsize=(max(3, 2.5 * n_qois), 2.5))
     if n_qois == 1:
         axes = [axes]
 
@@ -196,7 +196,7 @@ def plot_sobol_indices(results, qois, distributions, output_dir):
         has_total = len(st_vals) == len(param_names)
         width = 0.35 if has_total else 0.5
 
-        fig, ax = plt.subplots(figsize=(max(8, 2 * len(param_names)), 5))
+        fig, ax = plt.subplots(figsize=(max(4, 1.5 * len(param_names)), 3.0))
 
         if has_total:
             ax.bar(x - width / 2, s1_vals, width, label="First-order",
@@ -254,7 +254,7 @@ def plot_qoi_distributions(results, qois, output_dir):
         return None
 
     n_qois = len(qois)
-    fig, axes = plt.subplots(1, n_qois, figsize=(6 * n_qois, 5))
+    fig, axes = plt.subplots(1, n_qois, figsize=(max(3, 2.5 * n_qois), 2.5))
     if n_qois == 1:
         axes = [axes]
 
@@ -463,7 +463,7 @@ def plot_qoi_statistics_table(results, qois, output_dir):
         rows.append([_label_for_qoi(qoi), unit, f"{mean_val:.4e}", f"{std_val:.4e}"])
 
     fig, ax = plt.subplots(
-        figsize=(max(8, 1.8 * len(qois)), 1.0 + 0.45 * len(qois)))
+        figsize=(max(6, 1.2 * len(qois)), 0.5 + 0.45 * len(qois)))
     ax.axis("off")
     table = ax.table(
         cellText=rows,
@@ -525,7 +525,7 @@ def plot_relative_std(results, qois, output_dir):
         labels.append(_label_for_qoi(qoi))
 
     x = np.arange(len(qois))
-    fig, ax = plt.subplots(figsize=(max(8, 2 * len(qois)), 5))
+    fig, ax = plt.subplots(figsize=(max(6, 1.2 * len(qois)), 1.0 + 0.5 * len(qois)))
     ax.bar(x, rel_stds, color=_PRIMARY_COLOR, edgecolor="black", alpha=0.85)
     ax.set_yscale("log")
     ax.set_xticks(x)
@@ -573,7 +573,7 @@ def plot_input_uncertainty_pdfs(distributions, output_dir, n_samples=10000):
         return None
 
     n = len(plottable)
-    fig, axes = plt.subplots(1, n, figsize=(5 * n, 4))
+    fig, axes = plt.subplots(1, n, figsize=(3 * n, 2))
     if n == 1:
         axes = [axes]
 
@@ -595,7 +595,8 @@ def plot_input_uncertainty_pdfs(distributions, output_dir, n_samples=10000):
         ax.fill_between(x_grid, y_vals, alpha=0.25, color=_PRIMARY_COLOR)
         ax.set_xlabel(_label_for_param(name), fontsize=11)
         ax.set_ylabel("Density", fontsize=11)
-        ax.set_title(f"Input PDF – {_label_for_param(name)}", fontsize=12)
+        # ax.set_title(f"Input PDF – {_label_for_param(name)}", fontsize=12)
+        ax.set_title(f"{_label_for_param(name)}", fontsize=12)
         ax.legend(fontsize=9)
         ax.grid(axis="y", linestyle="--", alpha=0.5)
 
