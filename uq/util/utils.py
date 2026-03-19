@@ -74,9 +74,9 @@ def get_openmc_python():
     return sys.executable
 
 
-def validate_execution_setup():
+def validate_execution_setup(runnable_script="openmc_model_run.py"):
     """Validate that the execution environment is properly configured."""
-    runnable_script = "openmc_model_run.py"
+    
     script_path = os.path.join(os.getcwd(), runnable_script)
 
     if not os.path.exists(script_path):
