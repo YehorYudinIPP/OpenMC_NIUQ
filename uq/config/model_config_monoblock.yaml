@@ -1,0 +1,81 @@
+# OpenMC TBM (Test Blanket Module) Monoblock Model Configuration
+# — Monoblock Variant —
+#
+# Identical to model_config.yaml except the TBM ceramic fill is a solid
+# Li2TiO3 monoblock instead of randomly packed pebbles.
+#
+# Parameters with 'mean', 'relative_stdev', and 'pdf' fields are uncertain
+# inputs for the EasyVVUQ campaign.  Plain numeric values are fixed.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# HOW TO ADD A NEW UNCERTAIN PARAMETER
+# ═══════════════════════════════════════════════════════════════════════════
+# 1. Add the parameter below with 'mean', 'relative_stdev', and 'pdf' keys.
+#    If only a scalar value is provided for a parameter that should be
+#    uncertain, the system will automatically apply a Uniform distribution
+#    with CoV = 0.05 and print a warning.
+# 2. In openmc_model_run.py, read the parameter using _get_mean() so that
+#    both scalar and distribution-dict formats are supported.
+# 3. No changes are needed in easyvvuq_openmc.py — uncertain parameters
+#    are auto-discovered from this config file.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Geometry ──────────────────────────────────────────────────────────────────
+geometry:
+  type: tbm_pebble_bed          # TBM with Li2TiO3 (monoblock variant)
+  pebbles_or_monoblock: monoblock # 'pebbles' or 'monoblock'
+
+  # Target wheel (fixed)
+  wh_r: 50.0                    # cm – target wheel cylinder radius
+
+  # Target layer thicknesses (cm)
+  li_thickness:       0.02
+  cu_thickness:       0.3
+  water_thickness:    0.6
+  vacuum_thickness_1: 1.5
+  graphite_thickness: #0.7             # cm – graphite shielding layer thickness (uncertain)
+    mean: 0.7
+    relative_stdev: 0.05
+    pdf: normal
+  vacuum_thickness_2: 0.48
+  ti_thickness:       0.6
+  air_gap:            0.1
+
+  # TBM casing dimensions (cm, fixed)
+  eurofer_thickness: 0.5
+  tbm_width:         7.0
+  tbm_thickness:     2.0
+  tbm_height:        3.0
+  tbm_position_y:    -42.0      # cm – TBM y-offset from beam axis
+
+# ── Materials ─────────────────────────────────────────────────────────────────
+materials:
+  li_ceramic:
+    name: Li2TiO3
+    density:                    # g/cm³ – Li2TiO3 monoblock density
+      mean: 3.43
+      relative_stdev: 0.02
+      pdf: normal
+    li6_enrichment: 7.5           # at% Li-6 in lithium
+      # mean: 7.5                 # natural abundance
+      # relative_stdev: 0.05
+      # pdf: normal
+
+# ── Simulation settings ───────────────────────────────────────────────────────
+simulation:
+  run_mode: fixed_source        # neutron irradiation experiment
+  particles: 10000              # neutron histories per batch
+  batches:   100
+  seed:      1
+  output_directory: results/
+
+# ── Output / QoI ─────────────────────────────────────────────────────────────
+output:
+  results_file: results.csv
+  qoi:
+    - tritium_production_rate   # T nuclei produced per source neutron (TBR)
+    - total_neutron_flux        # total neutron flux intensity (n/cm²/s per source neutron)
+    - tbm_incident_flux         # neutron current incident on TBM casing surfaces
+    - tbm_inner_flux            # neutron flux inside the TBM (Li2TiO3 ceramic)
+    - tbm_heating               # nuclear heating in TBM ceramic (eV/source neutron)
+    - tbm_neutron_leakage       # neutron leakage current from TBM casing surfaces
