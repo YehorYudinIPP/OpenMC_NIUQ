@@ -1,0 +1,40 @@
+
+Packed 752 pebbles (r=0.1 cm, pf=0.3)
+
+...
+
+ Version | 0.15.3
+     Commit Hash | 27e38e894697bb32a1dac7848d2618818b6b8daf
+       Date/Time | 2026-03-02 13:07:53
+   MPI Processes | 1
+  OpenMP Threads | 12
+
+...
+
+Simulating batch 100
+ Creating state point statepoint.100.h5...
+
+ =======================>     TIMING STATISTICS     <=======================
+
+ Total time for initialization     = 3.1009e+00 seconds
+   Reading cross sections          = 2.8062e+00 seconds
+ Total time in simulation          = 4.9265e+00 seconds
+   Time in transport only          = 1.8481e+00 seconds
+   Time in active batches          = 4.9265e+00 seconds
+   Time accumulating tallies       = 3.0539e+00 seconds
+   Time writing statepoints        = 7.7263e-03 seconds
+ Total time for finalization       = 1.5382e-04 seconds
+ Total time elapsed                = 8.0311e+00 seconds
+ Calculation Rate (active)         = 202982 particles/second
+
+ ============================>     RESULTS     <============================
+
+ Leakage Fraction            = 1.02273 +/- 0.00023
+
+  tritium_production_rate = 9.3565e-08
+  total_neutron_flux = 1.3559e+02
+  tbm_incident_flux = 2.7838e-01
+  tbm_inner_flux = 2.0990e-04
+  tbm_heating = 5.1085e+01
+  tbm_neutron_leakage = 2.7838e-01
+Results saved to results.csv
