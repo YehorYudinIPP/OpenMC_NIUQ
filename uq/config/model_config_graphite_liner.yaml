@@ -50,17 +50,20 @@ geometry:
   tbm_position_y:    -42.0      # cm – TBM y-offset from beam axis
 
   # Graphite liner on the inner back wall of the TBM (cm)
-  graphite_liner_thickness: 0.5
+  graphite_liner_thickness: #0.5
+    mean: 0.5
+    relative_stdev: 0.05
+    pdf: normal
 
   # Pebble bed parameters (uncertain)
   pebble_radius:
     mean: 0.10                  # cm – nominal pebble radius
     relative_stdev: 0.05
     pdf: normal
-  packing_fraction: 0.30                    # nominal random packing fraction
-    # mean: 0.30                  # nominal random packing fraction
-    # relative_stdev: 0.05
-    # pdf: uniform
+  packing_fraction: #0.30                    # nominal random packing fraction
+    mean: 0.30                  # nominal random packing fraction
+    relative_stdev: 0.05
+    pdf: uniform
 
 # ── Materials ─────────────────────────────────────────────────────────────────
 materials:
@@ -68,12 +71,12 @@ materials:
     name: Li2TiO3
     density:                    # g/cm³ – Li2TiO3 pebble density
       mean: 3.43
-      relative_stdev: 0.02
+      relative_stdev: 0.05
       pdf: normal
-    li6_enrichment: 7.5           # at% Li-6 in lithium
-      # mean: 7.5                 # natural abundance
-      # relative_stdev: 0.05
-      # pdf: normal
+    li6_enrichment: #7.5           # at% Li-6 in lithium
+      mean: 7.5                 # natural abundance
+      relative_stdev: 0.05
+      pdf: normal
 
 # ── Simulation settings ───────────────────────────────────────────────────────
 simulation:
@@ -82,6 +85,10 @@ simulation:
   batches:   100
   seed:      1
   output_directory: results/
+
+# ── Execution settings ───────────────────────────────────────────────────────
+execution:
+  script: openmc_model_run_graphite_liner.py  # Python script to run OpenMC model
 
 # ── Output / QoI ─────────────────────────────────────────────────────────────
 output:
