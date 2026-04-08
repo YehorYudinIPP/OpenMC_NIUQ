@@ -1,0 +1,47 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# UQ Parameters-Only Specification
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# This file specifies ONLY the uncertain parameters for the UQ campaign.
+# The full model is defined in the base configuration file referenced below.
+#
+# Usage
+# -----
+#   from uq.parametric_model_builder import ParametricModelBuilder
+#
+#   builder = ParametricModelBuilder.from_yaml("uq/config/uq_parameters.yaml")
+#   merged_config = builder.build_config()
+#   run_config    = builder.build_config(sampled_values={"graphite_thickness": 0.72})
+#
+# Adding a new uncertain parameter
+# ---------------------------------
+# 1. Add an entry under 'parameters' below with:
+#      path            – dot-separated path in the base config YAML
+#      mean            – nominal / central value
+#      relative_stdev  – coefficient of variation (std / mean)
+#      pdf             – distribution family: normal, uniform, or lognormal
+# 2. No changes are needed in the base configuration file.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Path to the full model configuration (resolved relative to this file)
+base_config: model_config.yaml
+
+# ── Uncertain parameters ─────────────────────────────────────────────────
+parameters:
+  graphite_thickness:
+    path: geometry.graphite_thickness
+    mean: 0.7
+    relative_stdev: 0.05
+    pdf: normal
+
+  pebble_radius:
+    path: geometry.pebble_radius
+    mean: 0.10
+    relative_stdev: 0.05
+    pdf: normal
+
+  li_ceramic_density:
+    path: materials.li_ceramic.density
+    mean: 3.43
+    relative_stdev: 0.02
+    pdf: normal
