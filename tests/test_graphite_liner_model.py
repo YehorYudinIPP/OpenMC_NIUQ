@@ -61,7 +61,15 @@ class TestGraphiteLinerConfig:
         config = load_config(config_path)
         geom = config.get("geometry", {})
         assert "graphite_liner_thickness" in geom
-        assert float(geom["graphite_liner_thickness"]) == pytest.approx(0.5)
+        # The parameter is now an uncertain-parameter dict for UQ scanning
+        glt = geom["graphite_liner_thickness"]
+        assert isinstance(glt, dict), (
+            "graphite_liner_thickness should be an uncertain-parameter dict "
+            "with 'mean', 'relative_stdev', and 'pdf' keys"
+        )
+        assert float(glt["mean"]) == pytest.approx(0.5)
+        assert "relative_stdev" in glt
+        assert "pdf" in glt
 
     def test_config_preserves_base_geometry(self, config_path):
         """All base geometry parameters should still be present."""

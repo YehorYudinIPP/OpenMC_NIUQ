@@ -49,8 +49,11 @@ geometry:
   tbm_height:        3.0
   tbm_position_y:    -42.0      # cm – TBM y-offset from beam axis
 
-  # Graphite liner on the inner back wall of the TBM (cm)
-  graphite_liner_thickness: 0.5
+  # Graphite liner on the inner back wall of the TBM (cm, uncertain – scanned)
+  graphite_liner_thickness:
+    mean: 0.5
+    relative_stdev: 0.10
+    pdf: uniform
 
   # Pebble bed parameters (uncertain)
   pebble_radius:
