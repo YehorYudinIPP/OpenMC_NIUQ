@@ -1,8 +1,11 @@
 # OpenMC TBM (Test Blanket Module) Pebble-Bed Model Configuration
-# — Graphite Liner Variant —
+# — Front Graphite Liner Variant —
 #
-# Identical to model_config.yaml except for a ~0.5 cm graphite layer
-# added to the inner face of the TBM back wall.
+# Identical to model_config_graphite_liner.yaml except the graphite layer
+# is placed on the inner face of the TBM **front** (neutron-facing) wall
+# instead of the back wall.  Neutrons are pre-thermalized by the graphite
+# before entering the Li2TiO3 ceramic, which boosts the Li-6(n,t) cross
+# section and may increase the tritium production rate.
 #
 # Parameters with 'mean', 'relative_stdev', and 'pdf' fields are uncertain
 # inputs for the EasyVVUQ campaign.  Plain numeric values are fixed.
@@ -14,7 +17,7 @@
 #    If only a scalar value is provided for a parameter that should be
 #    uncertain, the system will automatically apply a Uniform distribution
 #    with CoV = 0.05 and print a warning.
-# 2. In openmc_model_run_graphite_liner.py, read the parameter using
+# 2. In openmc_model_run_graphite_liner_front.py, read the parameter using
 #    _get_mean() so that both scalar and distribution-dict formats are
 #    supported.
 # 3. No changes are needed in easyvvuq_openmc.py — uncertain parameters
@@ -49,7 +52,7 @@ geometry:
   tbm_height:        3.0
   tbm_position_y:    -42.0      # cm – TBM y-offset from beam axis
 
-  # Graphite liner on the inner back wall of the TBM (cm, uncertain – scanned)
+  # Graphite liner on the inner FRONT wall of the TBM (cm, uncertain – scanned)
   graphite_liner_thickness:
     mean: 0.5
     relative_stdev: 0.10
@@ -96,4 +99,3 @@ output:
     - tbm_inner_flux            # neutron flux inside the TBM (Li2TiO3 ceramic)
     - tbm_heating               # nuclear heating in TBM ceramic (eV/source neutron)
     - tbm_neutron_leakage       # neutron leakage current from TBM casing surfaces
-
