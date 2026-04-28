@@ -18,8 +18,119 @@ Supports two UQ methods:
   * Polynomial Chaos Expansion (PCE) via ``uq_scheme: pce``
   * Quasi-Monte Carlo (QMC) via ``uq_scheme: qmc``
 
-Usage
------
+Execution modes (``--exec-mode``)
+----------------------------------
+local (default)
+    Every OpenMC sample runs serially in the same Python / conda environment
+    that drives EasyVVUQ.  No additional dependencies are required.
+
+    Example command::
+
+        python easyvvuq_openmc.py --exec-mode local --uq-scheme pce --p-order 2
+
+spack
+    EasyVVUQ orchestration stays in the regular Python environment.
+    Each individual OpenMC run is dispatched as an independent task via
+    **QCG Pilot Job Manager** (``qcg-pilotjob``) and is wrapped with
+    ``spack -e <SPACK_ENV> env run python3 ...`` so that the correct
+    OpenMC build and its libraries are loaded automatically.
+
+    Spack-related variables (all have sensible defaults, override via CLI):
+
+    +--------------+--------------------+----------------------------------------------+
+    | CLI flag     | Default            | Meaning                                      |
+    +==============+====================+==============================================+
+    | --spack-env  | $WORK/my_openc_env | Spack env name or path containing OpenMC     |
+    +--------------+--------------------+----------------------------------------------+
+    | --spack-bin  | auto-detected      | Path to the ``spack`` executable             |
+    +--------------+--------------------+----------------------------------------------+
+    | --n-cores    | all available      | Max concurrent OpenMC tasks                  |
+    +--------------+--------------------+----------------------------------------------+
+
+    The per-sample command issued by QCG-PJ is::
+
+        {spack_bin} -e {spack_env} env run python3 openmc_model_run.py --config config.yaml
+
+    Example: run 4 samples in parallel on a local workstation::
+
+        python easyvvuq_openmc.py --exec-mode spack --n-cores 4 \
+            --spack-env $WORK/my_openc_env \
+            --spack-bin ~/spack/bin/spack \
+            --uq-scheme pce --p-order 2
+
+ARCHER2 (Spack via modules, 1 node / 128 cores)
+-------------------------------------------------
+On ARCHER2, Spack is a shared module installation; the full binary path is::
+
+    /mnt/lustre/a2fs-nvme/work/y07/shared/apps/dev/spack/1.0.2/spack/bin/spack
+
+The standard way to use OpenMC on ARCHER2 is::
+
+    module load other-software
+    module load spack
+    spack env activate my_openmc_env
+    spack load openmc
+
+For the UQ campaign we keep the EasyVVUQ orchestrator outside the Spack env
+and have QCG-PJ dispatch each sample task with ``spack ... env run python3``.
+Loading the Spack module in the batch script is sufficient because the
+environment variables set by ``module load spack`` (SPACK_ROOT, etc.) are
+**inherited by every QCG-PJ subprocess**, so Spack can find ``my_openmc_env``
+by name without the module being re-loaded inside each task.
+
+Batch submission (see ``slurm/archer2_openmc_uq.sh`` for the full script)::
+
+    sbatch slurm/archer2_openmc_uq.sh
+
+Minimal ARCHER2 SLURM script template::
+
+    #!/bin/bash
+    #SBATCH --job-name=openmc_uq
+    #SBATCH --nodes=1
+    #SBATCH --ntasks-per-node=128
+    #SBATCH --cpus-per-task=1
+    #SBATCH --time=04:00:00
+    #SBATCH --partition=standard
+    #SBATCH --qos=standard
+    #SBATCH --account=<YOUR_BUDGET_CODE>
+
+    # Set $WORK explicitly (pattern: /work/<project>/<group>/<username>)
+    export WORK=/work/<YOUR_PROJECT>/<YOUR_GROUP>/<YOUR_USERNAME>
+
+    # Load Spack module so that named environments can be resolved.
+    # $SPACK_ROOT and related vars are inherited by QCG-PJ subprocesses.
+    module load other-software
+    module load spack
+
+    # Activate the EasyVVUQ orchestration virtualenv (NOT the OpenMC Spack env)
+    source "$WORK/easyvvuq-env/bin/activate"
+
+    SPACK_BIN="/mnt/lustre/a2fs-nvme/work/y07/shared/apps/dev/spack/1.0.2/spack/bin/spack"
+
+    python "$WORK/OpenMC_NIUQ/uq/easyvvuq_openmc.py" \
+        --exec-mode spack \
+        --spack-bin  "$SPACK_BIN" \
+        --spack-env  my_openmc_env \
+        --uq-scheme  pce \
+        --p-order    2
+
+What SLURM / QCG-PJ sees on ARCHER2
+--------------------------------------
+* ``$SLURM_NTASKS=128``, ``$SLURM_JOB_NODELIST=<node>`` are read automatically
+  by QCG-PJ's ``LocalManager``; no ``--n-cores`` flag is needed.
+* For each UQ sample QCG-PJ spawns one worker process running::
+
+      /mnt/lustre/.../spack -e my_openmc_env env run \
+          python3 openmc_model_run.py --config config.yaml
+
+* ``spack -e my_openmc_env env run`` sets PATH and LD_LIBRARY_PATH for that
+  worker so it finds the correct OpenMC shared libraries, then execs python3.
+* Up to 128 workers run concurrently, one per physical core.
+* The EasyVVUQ orchestrator itself is single-threaded and occupies one core;
+  effective OpenMC concurrency is therefore 127-128 depending on OS scheduling.
+
+Usage summary
+--------------
     # Run with the default config located in uq/config/model_config.yaml
     python easyvvuq_openmc.py
 
@@ -31,7 +142,7 @@ Usage
     python easyvvuq_openmc.py --uq-scheme qmc --n-samples 256
 
 Adding new uncertain parameters
--------------------------------
+---------------------------------
 To add a new uncertain parameter to the UQ campaign you only need to modify
 the YAML configuration file (``model_config.yaml``):
 
@@ -43,7 +154,7 @@ the YAML configuration file (``model_config.yaml``):
 
 The functions ``discover_uncertain_parameters()``,
 ``define_parameter_distributions()``, and ``prepare_uq_campaign()`` in this
-module will automatically pick up the new parameter from the config — **no
+module will automatically pick up the new parameter from the config -- **no
 code changes are needed in this file**.
 """
 
@@ -300,12 +411,28 @@ def define_parameter_distributions(config, uncertain_specs=None,
 # Campaign preparation
 # ---------------------------------------------------------------------------
 
-def prepare_uq_campaign(config, config_file, fixed_params=None, uq_params=None):
+def prepare_uq_campaign(config, config_file, fixed_params=None, uq_params=None,
+                        exec_params=None):
     """
     Build and return a fully configured EasyVVUQ campaign.
 
     The uncertain parameters, their encoder paths, and QoIs are all
     derived from the YAML config – no hard-coded parameter lists.
+
+    Parameters
+    ----------
+    config : dict
+        Loaded YAML configuration.
+    config_file : str
+        Path to the YAML configuration file (used as encoder template).
+    fixed_params : dict or None
+        Parameters fixed for every run (not sampled by EasyVVUQ).
+    uq_params : dict or None
+        UQ method settings (``uq_scheme``, ``p_order``, ``n_samples``).
+    exec_params : dict or None
+        Execution settings forwarded to :func:`~util.utils.validate_execution_setup`.
+        When *None*, defaults to ``{'exec_mode': 'local'}``.
+        See module docstring for all supported keys.
 
     Returns
     -------
@@ -341,8 +468,9 @@ def prepare_uq_campaign(config, config_file, fixed_params=None, uq_params=None):
     logger.info("Decoder prepared for QoIs: %s", qois)
 
     # ── Execution command ─────────────────────────────────────────────────────
-    python_exe, script_path = validate_execution_setup()
-    execute = ExecuteLocal(f"{python_exe} {script_path} --config config.yaml")
+    exec_cmd, _script_path = validate_execution_setup(exec_params)
+    execute = ExecuteLocal(exec_cmd)
+    logger.info("Execution command: %s", exec_cmd)
 
     # ── Actions ───────────────────────────────────────────────────────────────
     actions = Actions(
@@ -392,10 +520,61 @@ def prepare_uq_campaign(config, config_file, fixed_params=None, uq_params=None):
 # Campaign execution
 # ---------------------------------------------------------------------------
 
-def run_uq_campaign(campaign):
-    """Execute all runs in the campaign locally and collate results."""
-    logger.info("Running UQ campaign (local execution)…")
-    campaign.execute().collate()
+def run_uq_campaign(campaign, exec_params=None):
+    """
+    Execute all runs in the campaign and collate results.
+
+    Parameters
+    ----------
+    campaign : easyvvuq.Campaign
+        Fully configured EasyVVUQ campaign.
+    exec_params : dict or None
+        Execution settings.  The key ``exec_mode`` controls parallelism:
+
+        * ``'local'`` (default) – serial execution in the current process.
+        * ``'spack'`` – parallel execution via QCG Pilot Job Manager.
+          Tasks run inside the Spack environment (see :func:`prepare_uq_campaign`).
+          ``n_cores`` (int, optional) limits the number of concurrent tasks;
+          when omitted QCG-PJ uses all available cores (or all allocated SLURM
+          resources when running inside a SLURM allocation).
+
+    Returns
+    -------
+    easyvvuq.Campaign
+    """
+    exec_params = exec_params or {}
+    mode = exec_params.get('exec_mode', 'local')
+
+    if mode == 'local':
+        logger.info("Running UQ campaign (local serial execution)…")
+        campaign.execute().collate()
+
+    elif mode == 'spack':
+        n_cores = exec_params.get('n_cores', None)
+        logger.info(
+            "Running UQ campaign via QCG-PJ (spack mode, n_cores=%s)…",
+            n_cores if n_cores is not None else "auto",
+        )
+        try:
+            from qcg.pilotjob.api.manager import LocalManager   # noqa: PLC0415
+            from easyqcgpj.pool import QCGPJPool                # noqa: PLC0415
+        except ImportError as exc:
+            raise ImportError(
+                "exec_mode='spack' requires 'qcg-pilotjob' and 'easyqcgpj'. "
+                "Install them with: pip install qcg-pilotjob easyqcgpj"
+            ) from exc
+
+        with QCGPJPool(
+            qcgpj_executor=LocalManager,
+            num_cores=n_cores,
+        ) as pool:
+            campaign.execute(pool=pool).collate()
+
+    else:
+        raise ValueError(
+            f"Unknown exec_mode '{mode}'. Choose: 'local' or 'spack'."
+        )
+
     logger.info("Execution and collation complete.")
     return campaign
 
@@ -473,7 +652,8 @@ def analyse_uq_results(campaign, qois, sampler, distributions,
 # Top-level entry point
 # ---------------------------------------------------------------------------
 
-def perform_uq_openmc(config_file=None, fixed_params=None, uq_params=None):
+def perform_uq_openmc(config_file=None, fixed_params=None, uq_params=None,
+                      exec_params=None):
     """
     Orchestrate the full EasyVVUQ uncertainty-propagation workflow for OpenMC.
 
@@ -488,8 +668,22 @@ def perform_uq_openmc(config_file=None, fixed_params=None, uq_params=None):
         UQ method settings, e.g.
         ``{'uq_scheme': 'pce', 'p_order': 2}`` or
         ``{'uq_scheme': 'qmc', 'n_samples': 256}``.
+    exec_params : dict or None
+        Execution settings forwarded to :func:`prepare_uq_campaign` and
+        :func:`run_uq_campaign`.  When *None*, defaults to ``{'exec_mode': 'local'}``.
+        Supported keys:
+
+        exec_mode : {'local', 'spack'}
+            How to run each OpenMC sample (see module docstring).
+        spack_env : str
+            Path to the Spack environment directory (default: ``$WORK/my_openc_env``).
+        spack_bin : str
+            Path to the ``spack`` executable (default: ``~/spack/bin/spack``).
+        n_cores : int or None
+            Maximum number of concurrent OpenMC tasks when exec_mode='spack'
+            (default: all available / all allocated SLURM cores).
     """
-    # ── Set up logging early ─────────────────────────────────────────────────
+    # ── Set up logging early ──────────────────────────────────────────────
     log_file = setup_logging()
 
     logger.info("")
@@ -524,6 +718,54 @@ def perform_uq_openmc(config_file=None, fixed_params=None, uq_params=None):
             default=128,
             help='Number of samples for QMC (default: 128)',
         )
+        # ── Execution-mode arguments ─────────────────────────────────────────────
+        parser.add_argument(
+            '--exec-mode',
+            default='local',
+            choices=['local', 'spack'],
+            help=(
+                "How to run each OpenMC sample. "
+                "'local': serial, current Python env (default). "
+                "'spack': parallel via QCG-PJ, each task wrapped with "
+                "'spack -e <env> env run python3 ...'. "
+                "Requires qcg-pilotjob and easyqcgpj to be installed."
+            ),
+        )
+        parser.add_argument(
+            '--spack-env',
+            default=None,
+            help=(
+                "Spack environment containing OpenMC – either a named "
+                "environment (e.g. my_openmc_env, resolved via spack config) "
+                "or a full filesystem path. "
+                "Used when --exec-mode=spack. "
+                "Default: $WORK/my_openc_env. "
+                "ARCHER2 example: my_openmc_env"
+            ),
+        )
+        parser.add_argument(
+            '--spack-bin',
+            default=None,
+            help=(
+                "Path to the spack executable. "
+                "Used when --exec-mode=spack. "
+                "Auto-detected from known locations (including the ARCHER2 "
+                "shared installation). Falls back to 'spack' on PATH. "
+                "ARCHER2 default: "
+                "/mnt/lustre/a2fs-nvme/work/y07/shared/apps/dev/spack/1.0.2/spack/bin/spack"
+            ),
+        )
+        parser.add_argument(
+            '--n-cores',
+            type=int,
+            default=None,
+            help=(
+                "Maximum number of concurrent OpenMC tasks when "
+                "--exec-mode=spack. "
+                "Default: all available cores (or all SLURM-allocated cores "
+                "when running inside a SLURM allocation)."
+            ),
+        )
         args = parser.parse_args()
         config_file = args.config
 
@@ -534,6 +776,15 @@ def perform_uq_openmc(config_file=None, fixed_params=None, uq_params=None):
                 'n_samples': args.n_samples,
             }
 
+        if exec_params is None:
+            exec_params = {'exec_mode': args.exec_mode}
+            if args.spack_env is not None:
+                exec_params['spack_env'] = args.spack_env
+            if args.spack_bin is not None:
+                exec_params['spack_bin'] = args.spack_bin
+            if args.n_cores is not None:
+                exec_params['n_cores'] = args.n_cores
+
     config = load_config(config_file)
     if config is None:
         logger.error("No valid configuration found – aborting.")
@@ -542,25 +793,30 @@ def perform_uq_openmc(config_file=None, fixed_params=None, uq_params=None):
     if uq_params is None:
         uq_params = {'uq_scheme': 'pce', 'p_order': 1}
 
+    if exec_params is None:
+        exec_params = {'exec_mode': 'local'}
+
     logger.info("UQ parameters: %s", uq_params)
     logger.info("Fixed parameters: %s", fixed_params)
+    logger.info("Execution parameters: %s", exec_params)
 
-    # ── Prepare ───────────────────────────────────────────────────────────────
+    # ── Prepare ────────────────────────────────────────────────────────────────────────────
     campaign, qois, distributions, timestamp, sampler = prepare_uq_campaign(
         config, config_file,
         fixed_params=fixed_params,
         uq_params=uq_params,
+        exec_params=exec_params,
     )
 
-    # ── Execute ───────────────────────────────────────────────────────────────
-    campaign = run_uq_campaign(campaign)
+    # ── Execute ──────────────────────────────────────────────────────────────────────────────
+    campaign = run_uq_campaign(campaign, exec_params=exec_params)
     campaign.campaign_db.dump()
 
-    # ── Analyse ───────────────────────────────────────────────────────────────
+    # ── Analyse ─────────────────────────────────────────────────────────────────────────────
     results = analyse_uq_results(
         campaign, qois, sampler, distributions, uq_params=uq_params)
 
-    # ── Visualise ─────────────────────────────────────────────────────────────
+    # ── Visualise ───────────────────────────────────────────────────────────────────────────
     visualise_results(results, qois, distributions, timestamp=timestamp)
 
     # Persist campaign config
@@ -573,11 +829,6 @@ def perform_uq_openmc(config_file=None, fixed_params=None, uq_params=None):
     logger.info("OpenMC UQ campaign completed successfully!")
     logger.info("Full log saved to: %s", log_file)
     return results
-
-
-# ---------------------------------------------------------------------------
-# __main__
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     perform_uq_openmc()
