@@ -74,8 +74,122 @@ def get_openmc_python():
     return sys.executable
 
 
-def validate_execution_setup():
-    """Validate that the execution environment is properly configured."""
+# ---------------------------------------------------------------------------
+# Execution-command builder
+# ---------------------------------------------------------------------------
+
+# ── Spack-related variables ───────────────────────────────────────────────
+#
+#  SPACK_ENV  (exec_params key: 'spack_env')
+#      Full path to the Spack environment that contains OpenMC and all its
+#      runtime libraries.  Defaults to  $WORK/my_openc_env.
+#      Example: /work/username/my_openc_env
+#
+#  SPACK_BIN  (exec_params key: 'spack_bin')
+#      Full path (or bare name if on PATH) of the ``spack`` executable.
+#      Defaults to ~/spack/bin/spack, falling back to ``spack`` on PATH.
+#      Example: /home/username/spack/bin/spack
+#
+#  The command issued for each sample in 'spack' mode is:
+#      {SPACK_BIN} -e {SPACK_ENV} env run python3 {script_path} --config config.yaml
+#
+#  ``spack -e <env> env run <cmd>`` activates the named Spack environment
+#  (sets PATH, LD_LIBRARY_PATH, etc.) for the child process without requiring
+#  an interactive shell.  The EasyVVUQ / QCG-PJ orchestrator therefore stays
+#  in the regular Python environment while every OpenMC instance runs inside
+#  the Spack environment.
+# ─────────────────────────────────────────────────────────────────────────
+
+_DEFAULT_SPACK_BIN_CANDIDATES = [
+    os.path.expanduser("~/spack/bin/spack"),
+    "/usr/local/bin/spack",
+]
+
+
+def _find_spack_bin():
+    """Return the best available path to the ``spack`` executable."""
+    for candidate in _DEFAULT_SPACK_BIN_CANDIDATES:
+        if os.path.exists(candidate):
+            return candidate
+    # Fall back to bare name and rely on PATH
+    return "spack"
+
+
+def build_exec_command(script_path, exec_params):
+    """
+    Build the shell command that EasyVVUQ issues for each OpenMC sample.
+
+    Parameters
+    ----------
+    script_path : str
+        Absolute path to ``openmc_model_run.py``.
+    exec_params : dict
+        Controls how the command is built.  Recognised keys:
+
+        exec_mode : {'local', 'spack'}
+            * ``'local'``  – run with the current Python interpreter
+              (conda / venv that has OpenMC installed).
+            * ``'spack'``  – wrap with ``spack -e <env> env run python3``
+              so that each OpenMC instance runs inside the Spack environment.
+              Parallelism is managed by QCG-PJ (see ``run_uq_campaign``).
+
+        spack_env : str, optional
+            Path to the Spack environment directory.
+            Default: ``$WORK/my_openc_env``.
+
+        spack_bin : str, optional
+            Path to the ``spack`` executable.
+            Default: ``~/spack/bin/spack`` if it exists, otherwise ``spack``
+            (must be on PATH).
+
+    Returns
+    -------
+    str
+        Full command string passed to ``ExecuteLocal`` / QCG-PJ for each run.
+    """
+    mode = exec_params.get('exec_mode', 'local')
+
+    if mode == 'local':
+        python_exe = get_openmc_python()
+        return f"{python_exe} {script_path} --config config.yaml"
+
+    if mode == 'spack':
+        spack_env = exec_params.get(
+            'spack_env',
+            os.path.join(os.environ.get('WORK', os.path.expanduser('~')),
+                         'my_openc_env'),
+        )
+        spack_bin = exec_params.get('spack_bin', _find_spack_bin())
+        return (
+            f"{spack_bin} -e {spack_env} env run "
+            f"python3 {script_path} --config config.yaml"
+        )
+
+    raise ValueError(
+        f"Unknown exec_mode '{mode}'. Choose: 'local' or 'spack'."
+    )
+
+
+def validate_execution_setup(exec_params=None):
+    """
+    Validate that the execution environment is properly configured and return
+    the full execution command for a single OpenMC run.
+
+    Parameters
+    ----------
+    exec_params : dict or None
+        Passed directly to :func:`build_exec_command`.
+        When *None*, defaults to ``{'exec_mode': 'local'}``.
+
+    Returns
+    -------
+    exec_cmd : str
+        The command string that will be issued for every sample run.
+    script_path : str
+        Absolute path to ``openmc_model_run.py``.
+    """
+    exec_params = exec_params or {'exec_mode': 'local'}
+
     runnable_script = "openmc_model_run.py"
     script_path = os.path.join(os.getcwd(), runnable_script)
 
@@ -86,13 +200,11 @@ def validate_execution_setup():
         print(f"Making script executable: {script_path}")
         os.chmod(script_path, 0o755)
 
-    python_exe = get_openmc_python()
-    if not os.path.exists(python_exe):
-        raise FileNotFoundError(f"Python executable not found: {python_exe}")
+    exec_cmd = build_exec_command(script_path, exec_params)
 
     print(f"✓ Script validation passed: {script_path}")
-    print(f"✓ Python executable: {python_exe}")
-    return python_exe, script_path
+    print(f"✓ Execution command  : {exec_cmd}")
+    return exec_cmd, script_path
 
 
 def save_sa_results_yaml(results_dict, filename_base="sa_results.yaml"):

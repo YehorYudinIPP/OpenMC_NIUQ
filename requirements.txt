@@ -12,6 +12,13 @@
 easyvvuq >= 1.2
 chaospy >= 4.3
 
+# Parallel execution via QCG Pilot Job Manager
+# Required only when using --exec-mode spack
+# qcg-pilotjob uses a LocalManager that works on a single workstation
+# as well as inside a SLURM allocation (reads SLURM_NTASKS automatically).
+qcg-pilotjob >= 0.14
+easyqcgpj >= 0.4
+
 # General scientific stack
 numpy
 pyyaml
