@@ -18,7 +18,7 @@
 #SBATCH --time=04:00:00
 #SBATCH --partition=standard
 #SBATCH --qos=standard
-#SBATCH --account=e05
+#SBATCH --account=e05-enviro-cil
 
 # =============================================================================
 # ARCHER2 filesystem paths
