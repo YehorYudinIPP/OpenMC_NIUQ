@@ -40,9 +40,9 @@ spack
     +--------------+--------------------+----------------------------------------------+
     | CLI flag     | Default            | Meaning                                      |
     +==============+====================+==============================================+
-    | --spack-env  | $WORK/my_openc_env | Spack environment directory containing OpenMC|
+    | --spack-env  | $WORK/my_openc_env | Spack env name or path containing OpenMC     |
     +--------------+--------------------+----------------------------------------------+
-    | --spack-bin  | ~/spack/bin/spack  | Path to the ``spack`` executable             |
+    | --spack-bin  | auto-detected      | Path to the ``spack`` executable             |
     +--------------+--------------------+----------------------------------------------+
     | --n-cores    | all available      | Max concurrent OpenMC tasks                  |
     +--------------+--------------------+----------------------------------------------+
@@ -58,34 +58,76 @@ spack
             --spack-bin ~/spack/bin/spack \
             --uq-scheme pce --p-order 2
 
-    Example: run inside a SLURM allocation (QCG-PJ discovers allocated cores
-    automatically via $SLURM_NTASKS / $SLURM_JOB_NODELIST)::
+ARCHER2 (Spack via modules, 1 node / 128 cores)
+-------------------------------------------------
+On ARCHER2, Spack is a shared module installation; the full binary path is::
 
-        # 1. Allocate resources in a batch script:
-        #    #SBATCH --nodes=2 --ntasks-per-node=16
+    /mnt/lustre/a2fs-nvme/work/y07/shared/apps/dev/spack/1.0.2/spack/bin/spack
 
-        # 2. Launch EasyVVUQ in the Python environment (NOT the Spack env):
-        python easyvvuq_openmc.py --exec-mode spack \
-            --spack-env $WORK/my_openc_env \
-            --uq-scheme pce --p-order 2
+The standard way to use OpenMC on ARCHER2 is::
 
-    A minimal SLURM batch script template::
+    module load other-software
+    module load spack
+    spack env activate my_openmc_env
+    spack load openmc
 
-        #!/bin/bash
-        #SBATCH --job-name=openmc_uq
-        #SBATCH --nodes=2
-        #SBATCH --ntasks-per-node=16
-        #SBATCH --time=04:00:00
+For the UQ campaign we keep the EasyVVUQ orchestrator outside the Spack env
+and have QCG-PJ dispatch each sample task with ``spack ... env run python3``.
+Loading the Spack module in the batch script is sufficient because the
+environment variables set by ``module load spack`` (SPACK_ROOT, etc.) are
+**inherited by every QCG-PJ subprocess**, so Spack can find ``my_openmc_env``
+by name without the module being re-loaded inside each task.
 
-        # Activate the EasyVVUQ Python environment (not the Spack OpenMC env)
-        source /path/to/easyvvuq-env/bin/activate
+Batch submission (see ``slurm/archer2_openmc_uq.sh`` for the full script)::
 
-        # QCG-PJ LocalManager automatically reads SLURM_NTASKS / SLURM_JOB_NODELIST
-        python /path/to/uq/easyvvuq_openmc.py \
-            --exec-mode spack \
-            --spack-env "$WORK/my_openc_env" \
-            --spack-bin "$HOME/spack/bin/spack" \
-            --uq-scheme pce --p-order 2
+    sbatch slurm/archer2_openmc_uq.sh
+
+Minimal ARCHER2 SLURM script template::
+
+    #!/bin/bash
+    #SBATCH --job-name=openmc_uq
+    #SBATCH --nodes=1
+    #SBATCH --ntasks-per-node=128
+    #SBATCH --cpus-per-task=1
+    #SBATCH --time=04:00:00
+    #SBATCH --partition=standard
+    #SBATCH --qos=standard
+    #SBATCH --account=<YOUR_BUDGET_CODE>
+
+    # Set $WORK explicitly (pattern: /work/<project>/<group>/<username>)
+    export WORK=/work/<YOUR_PROJECT>/<YOUR_GROUP>/<YOUR_USERNAME>
+
+    # Load Spack module so that named environments can be resolved.
+    # $SPACK_ROOT and related vars are inherited by QCG-PJ subprocesses.
+    module load other-software
+    module load spack
+
+    # Activate the EasyVVUQ orchestration virtualenv (NOT the OpenMC Spack env)
+    source "$WORK/easyvvuq-env/bin/activate"
+
+    SPACK_BIN="/mnt/lustre/a2fs-nvme/work/y07/shared/apps/dev/spack/1.0.2/spack/bin/spack"
+
+    python "$WORK/OpenMC_NIUQ/uq/easyvvuq_openmc.py" \
+        --exec-mode spack \
+        --spack-bin  "$SPACK_BIN" \
+        --spack-env  my_openmc_env \
+        --uq-scheme  pce \
+        --p-order    2
+
+What SLURM / QCG-PJ sees on ARCHER2
+--------------------------------------
+* ``$SLURM_NTASKS=128``, ``$SLURM_JOB_NODELIST=<node>`` are read automatically
+  by QCG-PJ's ``LocalManager``; no ``--n-cores`` flag is needed.
+* For each UQ sample QCG-PJ spawns one worker process running::
+
+      /mnt/lustre/.../spack -e my_openmc_env env run \
+          python3 openmc_model_run.py --config config.yaml
+
+* ``spack -e my_openmc_env env run`` sets PATH and LD_LIBRARY_PATH for that
+  worker so it finds the correct OpenMC shared libraries, then execs python3.
+* Up to 128 workers run concurrently, one per physical core.
+* The EasyVVUQ orchestrator itself is single-threaded and occupies one core;
+  effective OpenMC concurrency is therefore 127-128 depending on OS scheduling.
 
 Usage summary
 --------------
@@ -693,9 +735,12 @@ def perform_uq_openmc(config_file=None, fixed_params=None, uq_params=None,
             '--spack-env',
             default=None,
             help=(
-                "Path to the Spack environment containing OpenMC. "
+                "Spack environment containing OpenMC – either a named "
+                "environment (e.g. my_openmc_env, resolved via spack config) "
+                "or a full filesystem path. "
                 "Used when --exec-mode=spack. "
-                "Default: $WORK/my_openc_env."
+                "Default: $WORK/my_openc_env. "
+                "ARCHER2 example: my_openmc_env"
             ),
         )
         parser.add_argument(
@@ -704,7 +749,10 @@ def perform_uq_openmc(config_file=None, fixed_params=None, uq_params=None,
             help=(
                 "Path to the spack executable. "
                 "Used when --exec-mode=spack. "
-                "Default: ~/spack/bin/spack (falls back to 'spack' on PATH)."
+                "Auto-detected from known locations (including the ARCHER2 "
+                "shared installation). Falls back to 'spack' on PATH. "
+                "ARCHER2 default: "
+                "/mnt/lustre/a2fs-nvme/work/y07/shared/apps/dev/spack/1.0.2/spack/bin/spack"
             ),
         )
         parser.add_argument(

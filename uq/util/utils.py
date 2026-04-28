@@ -81,14 +81,20 @@ def get_openmc_python():
 # ── Spack-related variables ───────────────────────────────────────────────
 #
 #  SPACK_ENV  (exec_params key: 'spack_env')
-#      Full path to the Spack environment that contains OpenMC and all its
-#      runtime libraries.  Defaults to  $WORK/my_openc_env.
-#      Example: /work/username/my_openc_env
+#      The Spack environment that contains OpenMC and all its runtime
+#      libraries.  Can be either:
+#        • A full filesystem path  – e.g. /work/e723/e723/jsmith/my_openmc_env
+#        • A named environment     – e.g. my_openmc_env
+#      Named environments are resolved by spack using the configuration scope
+#      that was set up by "module load spack" (ARCHER2) or equivalent.
+#      Default: $WORK/my_openc_env  (uses the $WORK env var when present).
 #
 #  SPACK_BIN  (exec_params key: 'spack_bin')
 #      Full path (or bare name if on PATH) of the ``spack`` executable.
-#      Defaults to ~/spack/bin/spack, falling back to ``spack`` on PATH.
-#      Example: /home/username/spack/bin/spack
+#      On ARCHER2 this is the shared installation; do NOT rely on the module-
+#      provided PATH because QCG-PJ subprocesses may not inherit it reliably.
+#      Default: first match among the known candidates, else ``spack``.
+#      ARCHER2: /mnt/lustre/a2fs-nvme/work/y07/shared/apps/dev/spack/1.0.2/spack/bin/spack
 #
 #  The command issued for each sample in 'spack' mode is:
 #      {SPACK_BIN} -e {SPACK_ENV} env run python3 {script_path} --config config.yaml
@@ -98,9 +104,23 @@ def get_openmc_python():
 #  an interactive shell.  The EasyVVUQ / QCG-PJ orchestrator therefore stays
 #  in the regular Python environment while every OpenMC instance runs inside
 #  the Spack environment.
+#
+#  ARCHER2 note
+#  ------------
+#  On ARCHER2 the Spack module path is a shared installation.  Load the
+#  modules in the SLURM batch script so that $SPACK_ROOT and related env vars
+#  are inherited by QCG-PJ worker subprocesses:
+#
+#      module load other-software
+#      module load spack
+#      # then run the EasyVVUQ orchestrator with --exec-mode spack
+#
 # ─────────────────────────────────────────────────────────────────────────
 
 _DEFAULT_SPACK_BIN_CANDIDATES = [
+    # ARCHER2 shared Spack installation
+    "/mnt/lustre/a2fs-nvme/work/y07/shared/apps/dev/spack/1.0.2/spack/bin/spack",
+    # User-local installations
     os.path.expanduser("~/spack/bin/spack"),
     "/usr/local/bin/spack",
 ]
@@ -134,18 +154,40 @@ def build_exec_command(script_path, exec_params):
               Parallelism is managed by QCG-PJ (see ``run_uq_campaign``).
 
         spack_env : str, optional
-            Path to the Spack environment directory.
-            Default: ``$WORK/my_openc_env``.
+            Spack environment containing OpenMC.  Accepts either:
+              * A **named environment** (e.g. ``my_openmc_env``) – resolved by
+                spack using the configuration scope set up by
+                ``module load spack`` or equivalent.  This is the recommended
+                form on ARCHER2.
+              * A **full filesystem path** (e.g.
+                ``/work/e723/e723/jsmith/my_openmc_env``).
+            Default: ``$WORK/my_openc_env`` (falls back to
+            ``~/my_openc_env`` when ``$WORK`` is not set).
 
         spack_bin : str, optional
             Path to the ``spack`` executable.
-            Default: ``~/spack/bin/spack`` if it exists, otherwise ``spack``
-            (must be on PATH).
+            Default: first match in the known-path list (includes the
+            ARCHER2 shared installation), otherwise ``spack`` on PATH.
+            **ARCHER2**: ``/mnt/lustre/a2fs-nvme/work/y07/shared/apps/dev/spack/1.0.2/spack/bin/spack``
 
     Returns
     -------
     str
         Full command string passed to ``ExecuteLocal`` / QCG-PJ for each run.
+
+    Notes
+    -----
+    On ARCHER2 the Spack module must be loaded in the SLURM batch script
+    *before* launching the EasyVVUQ orchestrator so that ``$SPACK_ROOT`` and
+    related configuration variables are inherited by QCG-PJ subprocesses::
+
+        module load other-software
+        module load spack
+        # then: python uq/easyvvuq_openmc.py --exec-mode spack ...
+
+    The per-task command on ARCHER2 becomes::
+
+        /mnt/lustre/.../spack -e my_openmc_env env run python3 openmc_model_run.py --config config.yaml
     """
     mode = exec_params.get('exec_mode', 'local')
 
