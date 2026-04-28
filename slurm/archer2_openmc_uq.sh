@@ -18,7 +18,7 @@
 #SBATCH --time=04:00:00
 #SBATCH --partition=standard
 #SBATCH --qos=standard
-#SBATCH --account=<YOUR_BUDGET_CODE>     # <<< replace with your ARCHER2 budget code
+#SBATCH --account=e05
 
 # =============================================================================
 # ARCHER2 filesystem paths
@@ -29,22 +29,20 @@
 # correct value.
 #
 # Pattern:  /work/<project_code>/<group_code>/<username>
-# Example:  /work/e723/e723/jsmith
-export WORK="/work/YOUR_PROJECT/YOUR_GROUP/YOUR_USERNAME"  # <<< edit this
+export WORK="/work/e05/e05/yyudin01"
 
 # =============================================================================
 # Repository and Python-environment paths
 # =============================================================================
 # Directory where this repository is checked out on the Lustre filesystem:
-REPO_DIR="$WORK/OpenMC_NIUQ"                                   # <<< edit if different
+REPO_DIR="$WORK/OpenMC_NIUQ"
 
 # Python virtualenv that contains EasyVVUQ, qcg-pilotjob, and easyqcgpj.
 # This must NOT be the Spack OpenMC environment — it is the orchestration env.
-# Create it once with:
-#   python3 -m venv "$WORK/easyvvuq-env"
-#   source "$WORK/easyvvuq-env/bin/activate"
-#   pip install easyvvuq qcg-pilotjob easyqcgpj chaospy numpy pyyaml matplotlib
-VENV_DIR="$WORK/easyvvuq-env"                                  # <<< edit if different
+# Install extra dependencies once with:
+#   source "$VENV_DIR/bin/activate"
+#   pip install qcg-pilotjob easyqcgpj
+VENV_DIR="$WORK/venvs/easyvvuq_tmap8"
 
 # =============================================================================
 # Spack / OpenMC settings (ARCHER2-specific)
@@ -130,7 +128,7 @@ echo "------------------------------------------------------------"
 # Verify the Python virtualenv is usable:
 [[ -f "$VENV_DIR/bin/activate" ]] || {
     echo "ERROR: Python virtualenv not found: $VENV_DIR"
-    echo "       Create it with:"
+    echo "       If you need to create it:"
     echo "         python3 -m venv $VENV_DIR"
     echo "         source $VENV_DIR/bin/activate"
     echo "         pip install easyvvuq qcg-pilotjob easyqcgpj chaospy numpy pyyaml matplotlib"
